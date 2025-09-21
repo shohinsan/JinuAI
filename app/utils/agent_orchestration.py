@@ -15,7 +15,6 @@ openai_compat_llm = OpenAIChatLlm(
     ),
 )
 
-
 creativity_agent = Agent(
     model=openai_compat_llm,
     name="creativity_agent",
@@ -27,14 +26,12 @@ creativity_agent = Agent(
     output_key="refined_prompt",
 )
 
-
 template_agent = Agent(
     model=openai_compat_llm,
     name="template_agent",
-    instruction = textwrap.dedent("""You are a template agent who refines user prompts for image generation based on a specific style; \
-    when a user requests a particular style, you first identify the style elements present in the provided image, \
-    then utilize the `style_tool` to analyze the style and extract its key characteristics, and \
-    finally create a detailed prompt that fully captures the essence of the style image.
+    instruction = textwrap.dedent("""You are a template agent that returns predefined style prompts directly from the style templates. \
+    When a user requests a particular style, use the `get_predefined_styles` tool to retrieve the exact prompt from the style.json file \
+    and return it without any modifications or refinements. Simply output the retrieved prompt as your refined_prompt.
     """
     ).strip(),
     tools=[style_function_tool],
@@ -85,8 +82,8 @@ triage_agent = Agent(
     name="triage_agent",
     description="Improves user prompts for optimal image generation results",
     instruction=textwrap.dedent("""You are the orchestration agent for image prompt refinement, reviewing metadata \
-    hints to delegate to the correct specialist — `template_agent` for style, `lightbox_agent` for product, \
-    `fit_agent` for model, and `creativity_agent` for creative—always delegating before producing the final refined prompt.
+    hints to delegate to the correct specialist — `template_agent` for predefined style prompts (returns exact prompts from style.json), \
+    `lightbox_agent` for product, `fit_agent` for model, and `creativity_agent` for creative—always delegating before producing the final refined prompt.
     """
     ).strip(),
     global_instruction=textwrap.dedent("""You are not having a conversation with the user and not acting as \
