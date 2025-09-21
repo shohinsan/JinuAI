@@ -1,20 +1,25 @@
-
-# JinuAI
-
 ## Overview
 
-This project is an **AI-powered image generation application** that allows users to create high-quality images using Google's advanced AI model codenamed Nano Banana. It supports multiple modes including:
+This project is an **AI-powered image generation application** that allows users to create high-quality images using Google's advanced AI model codenamed **Nano Banana**.  
 
-- **Creative Mode:** Generate images from scratch based on user prompts.
-- **Fitting Mode:** Modify existing images to fit new styles or concepts.
-- **Lightbox (Product) Mode:** Showcase and edit product images.
-- **Style (Template) Mode:** Apply predefined templates or styles to images.
+It supports multiple modes including:
 
-> ⚠️ **Important:** This project **requires the GOOGLE_AI_SDK** to function properly.
+- **Creative Mode:** Generate images from scratch based on user prompts.  
+- **Fitting Mode:** Modify existing images to fit new styles or concepts.  
+- **Lightbox (Product) Mode:** Showcase and edit product images.  
+- **Style (Template) Mode:** Apply predefined templates or styles to images.  
 
----
+> ⚠️ **Important:** This project **requires the GOOGLE_AI_SDK** to function properly.  
 
-## Core
+## Core files
 
-- **routes/agent.py**
-- **utils/agent_...py**
+```text
+📂 app
+├── 📂 routes
+│   ├── 📄 agent.py
+│   └── 📄 style.json
+├── 📂 utils
+│   ├── 📄 agent_guardrail.py
+│   ├── 📄 agent_helpers.py
+│   ├── 📄 agent_orchestration.py
+│   └── 📄 agent_tool.py
