@@ -1,0 +1,18 @@
+{
+  "polaroid": {
+    "prompt": "Create an authentic Polaroid-style snapshot that naturally combines two people in the same frame, capturing them in a spontaneous moment. Use gentle flash lighting that falls off around the edges to enhance the retro aesthetic, and add a subtle motion blur to suggest movement while keeping both individuals' facial features unchanged to avoid distortion or smoothing. Place them against a simple off-white curtain background reminiscent of a casual living room, and preserve the intimate pose of the two people hugging as they look toward the camera.",
+    "category": "style"
+  },
+  "figure": {
+    "prompt": "Create a 1/7 scale commercialized figurine of the character in the picture, designed in a realistic style and placed within a real environment on a computer desk. The figurine should stand on a round transparent acrylic base, while the computer screen beside it displays the 3D modeling process of this same figurine, creating a natural connection between the physical and digital forms. Next to the monitor, include a toy packaging box styled like a high-quality collectible figure, printed with original artwork that features two-dimensional flat illustrations of the figurine, seamlessly tying the presentation together.",
+    "category": "style"
+  },
+  "foodie": {
+    "prompt": "Photograph this product on a table against a solid background, styled in a dramatic modern scene where the key ingredients appear fresh and raw, flying outward in an explosive dynamic arrangement that highlights both freshness and nutritional value. Present the composition as a promotional ad shot without text, ensuring the product remains the central focus while the background incorporates the key brand colors to unify the overall visual impact.",
+    "category": "style"
+  },
+  "explosive": {
+    "prompt": "Double exposure, Midjourney style, merging, blending, and overlaying in a stunning composition inspired by Yukisakura. Create an exceptional double exposure masterpiece where the silhouette of the uploaded human figure is harmoniously intertwined with visually striking, rugged landscapes during a lively spring season. Within the silhouette, reveal sun-bathed pine forests, towering mountain peaks, and a lone horse cutting through the trail, each element echoing outward to add depth, narrative, and solitude. Build beautiful tension by setting the figure against a stark monochrome background that maintains razor-sharp contrast, drawing all focus to the richly layered double exposure. Characterize the piece with a vibrant full-color scheme inside the silhouette and crisp, deliberate lines that trace every contour with emotional precision.",
+    "category": "style"
+  }
+}
