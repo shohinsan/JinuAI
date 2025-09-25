@@ -1,4 +1,4 @@
-# Claude Project Guide
+# Project Guide for Agents
 
 ## What This Service Does
 - FastAPI backend that orchestrates an image-generation workflow around Google "Nano Banana" (Gemini) models.
