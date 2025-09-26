@@ -32,6 +32,18 @@ def parse_cors(v: Any) -> list[str] | str:
         return v
     raise ValueError(v)
 
+# _database_session_service: DatabaseSessionService | None = None
+
+def get_banana_session_service() -> DatabaseSessionService:
+    """Return the shared ADK database session service."""
+    
+    session = Settings.GOOGLE_BANANA_MODEL_SESSION
+    if session is None:
+        session = DatabaseSessionService(
+            db_url=settings.SYNC_DATABASE_URI,
+        )
+        Settings.GOOGLE_BANANA_MODEL_SESSION = session
+    return session
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -138,6 +150,7 @@ class Settings(BaseSettings):
     GOOGLE_AGENT_NAME: str = "image_app"
 
     GOOGLE_GENAI_CLIENT: ClassVar[genai.Client | None] = None
+    
     GOOGLE_BANANA_MODEL_SESSION: ClassVar[DatabaseSessionService | None] = None
 
     @computed_field  # type: ignore[prop-decorator]
@@ -184,3 +197,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
+

@@ -284,6 +284,26 @@ class Agents(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class AgentCreate(SQLModel):
+    """Payload for creating an agent session record."""
+
+    app_name: str
+    agent: str
+    session_id: str
+    user_id: uuid.UUID
+    title: str | None = None
+    status: ImageStatus = ImageStatus.PENDING
+    turn_count: int = 0
+
+
+class AgentUpdate(SQLModel):
+    """Payload for updating an agent session record."""
+
+    title: str | None = None
+    status: ImageStatus | None = None
+    turn_count: int | None = None
+
+
 # ===========================================================
 # DO NOT TOUCH THIS CODE, I PUT THIS HERE TO WORK ON LATER
 # ============================================================

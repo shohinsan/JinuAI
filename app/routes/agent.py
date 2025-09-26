@@ -1,11 +1,26 @@
 import base64
 import os
-from typing import Optional, List
+from typing import List, Optional
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form
-from app.utils.agent_helpers import ensure_session_exists, fetch_refined_prompt, generate_image_bytes, prepare_upload_payloads, resolve_prompt_and_category, run_root_agent
-from app.utils.delegate import CurrentUser
-from app.utils.models import ImageStatus,  ImageCategory, ImageMimeType, ImageRequest, ImageResponse, ImageSize
+from fastapi import APIRouter, File, Form, UploadFile
+from app.utils.agent_helpers import (
+    ensure_session_exists,
+    fetch_refined_prompt,
+    generate_image_bytes,
+    prepare_upload_payloads,
+    resolve_prompt_and_category,
+    run_root_agent,
+)
+from app.utils.config import settings
+from app.utils.delegate import AgentServiceDep, CurrentUser
+from app.utils.models import (
+    ImageCategory,
+    ImageMimeType,
+    ImageRequest,
+    ImageResponse,
+    ImageSize,
+    ImageStatus,
+)
 
 router = APIRouter()
 
@@ -19,7 +34,9 @@ async def preview_refined_prompt(
     output_format: Optional[ImageMimeType] = Form(ImageMimeType.PNG),
     session_id: Optional[str] = Form(None),
     category: Optional[ImageCategory] = Form(None),
-    current_user: CurrentUser = None,
+    *,
+    current_user: CurrentUser,
+    agent_service: AgentServiceDep,
 ):
     request = ImageRequest(
         prompt=prompt,
@@ -32,18 +49,29 @@ async def preview_refined_prompt(
         category=category,
     )
 
-    user_id = str(current_user.id)
-    # session_id = request.session_id
+    user_uuid = current_user.id
+    user_id = str(user_uuid)
 
     session_id = session_id or str(uuid.uuid4())
-    
+
     await ensure_session_exists(user_id, session_id)
 
     file_payloads = await prepare_upload_payloads(request.files)
     resolved_prompt, category, normalized_style = resolve_prompt_and_category(request)
-    
+
     size = request.size or ImageSize.MEDIUM
     output_format = request.output_format or ImageMimeType.PNG
+
+    title_source = request.prompt or resolved_prompt
+    session_title = (title_source or "Image request")[:200]
+
+    agent_service.start_turn(
+        app_name=settings.GOOGLE_AGENT_NAME,
+        agent_name="triage_agent",
+        session_id=session_id,
+        user_id=user_uuid,
+        title=session_title,
+    )
 
 
 
@@ -62,17 +90,37 @@ async def preview_refined_prompt(
         )
     )
 
-    await run_root_agent(user_id, session_id, text_for_agent)
+    try:
+        await run_root_agent(user_id, session_id, text_for_agent)
 
-    refined_prompt = (
-        await fetch_refined_prompt(user_id, session_id, resolved_prompt)
-    ).strip()
+        refined_prompt = (
+            await fetch_refined_prompt(user_id, session_id, resolved_prompt)
+        ).strip()
 
-    final_bytes = await generate_image_bytes(
-        file_payloads=file_payloads,
-        refined_prompt=refined_prompt,
-        output_format=output_format,
-    )
+        final_bytes = await generate_image_bytes(
+            file_payloads=file_payloads,
+            refined_prompt=refined_prompt,
+            output_format=output_format,
+        )
+    except Exception:
+        agent_service.finish_turn(
+            app_name=settings.GOOGLE_AGENT_NAME,
+            agent_name="triage_agent",
+            session_id=session_id,
+            user_id=user_uuid,
+            status=ImageStatus.FAILED,
+            title=session_title,
+        )
+        raise
+    else:
+        agent_service.finish_turn(
+            app_name=settings.GOOGLE_AGENT_NAME,
+            agent_name="triage_agent",
+            session_id=session_id,
+            user_id=user_uuid,
+            status=ImageStatus.COMPLETED,
+            title=session_title,
+        )
 
     # Save the generated image to the generated-img folder
     out_dir = os.path.join(os.getcwd(), "generated-img")

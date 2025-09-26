@@ -1,15 +1,11 @@
 
 
 import asyncio
-from typing import Optional, cast
-from fastapi import UploadFile
-from app.utils.agent_tool import get_predefined_styles
-from app.utils.config import settings, Settings
-from app.utils.models import ImageCategory, ImageMimeType, ImageRequest
-from google.adk.sessions import DatabaseSessionService
-from PIL import Image
 from io import BytesIO
-from app.utils.agent_orchestration import runner_image
+from typing import Optional, cast
+
+from fastapi import UploadFile
+from google import genai
 from google.genai import types
 from google.genai.types import (
     GenerateContentConfig,
@@ -18,17 +14,11 @@ from google.genai.types import (
     Part,
     SafetySetting,
 )
-from google import genai
+from PIL import Image
 
-
-def get_banana_session_service() -> DatabaseSessionService:
-    service = Settings.GOOGLE_BANANA_MODEL_SESSION
-    if service is None:
-        service = DatabaseSessionService(
-            db_url=settings.SYNC_DATABASE_URI,
-        )
-        Settings.GOOGLE_BANANA_MODEL_SESSION = service
-    return service
+from app.utils.agent_tool import get_predefined_styles
+from app.utils.config import get_banana_session_service, settings
+from app.utils.models import ImageCategory, ImageMimeType, ImageRequest
 
 
 async def ensure_session_exists(user_id: str, session_id: str) -> None:
@@ -162,6 +152,7 @@ async def run_root_agent(
     session_id: str,
     text_for_agent: str,
 ) -> Optional[str]:
+    from app.utils.agent_orchestration import runner_image
 
     content = types.Content(
         role="user",
