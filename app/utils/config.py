@@ -9,7 +9,7 @@ import secrets
 import warnings
 from typing import Annotated, Any, Literal, Self, ClassVar
 from google import genai
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions import DatabaseSessionService
 
 from pydantic import (
     AnyUrl,
@@ -138,7 +138,7 @@ class Settings(BaseSettings):
     GOOGLE_AGENT_NAME: str = "image_app"
 
     GOOGLE_GENAI_CLIENT: ClassVar[genai.Client | None] = None
-    GOOGLE_BANANA_MODEL_SESSION: ClassVar[InMemorySessionService] = InMemorySessionService()
+    GOOGLE_BANANA_MODEL_SESSION: ClassVar[DatabaseSessionService | None] = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

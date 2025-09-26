@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from app.utils.agent_guardrail import prompt_input_guardrail
+from app.utils.agent_helpers import get_banana_session_service
 from app.utils.agent_tool import style_function_tool
 from app.utils.config import settings
 
@@ -102,5 +103,5 @@ triage_agent = Agent(
 runner_image = Runner(
     app_name=settings.GOOGLE_AGENT_NAME,
     agent=triage_agent,
-    session_service=settings.GOOGLE_BANANA_MODEL_SESSION,
+    session_service=get_banana_session_service(),
 )

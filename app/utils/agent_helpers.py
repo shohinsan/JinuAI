@@ -3,12 +3,13 @@
 import asyncio
 from typing import Optional, cast
 from fastapi import UploadFile
-from app.utils.agent_orchestration import runner_image
 from app.utils.agent_tool import get_predefined_styles
-from app.utils.config import settings
+from app.utils.config import settings, Settings
 from app.utils.models import ImageCategory, ImageMimeType, ImageRequest
+from google.adk.sessions import DatabaseSessionService
 from PIL import Image
 from io import BytesIO
+from app.utils.agent_orchestration import runner_image
 from google.genai import types
 from google.genai.types import (
     GenerateContentConfig,
@@ -20,16 +21,28 @@ from google.genai.types import (
 from google import genai
 
 
+def get_banana_session_service() -> DatabaseSessionService:
+    service = Settings.GOOGLE_BANANA_MODEL_SESSION
+    if service is None:
+        service = DatabaseSessionService(
+            db_url=settings.SYNC_DATABASE_URI,
+        )
+        Settings.GOOGLE_BANANA_MODEL_SESSION = service
+    return service
+
+
 async def ensure_session_exists(user_id: str, session_id: str) -> None:
     # Ensure session exists
 
-    session = await settings.GOOGLE_BANANA_MODEL_SESSION.get_session(
+    banana_session_service = get_banana_session_service()
+
+    session = await banana_session_service.get_session(
         app_name=settings.GOOGLE_AGENT_NAME,
         user_id=user_id,
         session_id=session_id,
     )
     if not session:
-        await settings.GOOGLE_BANANA_MODEL_SESSION.create_session(
+        await banana_session_service.create_session(
             app_name=settings.GOOGLE_AGENT_NAME,
             user_id=user_id,
             session_id=session_id,
@@ -128,7 +141,9 @@ async def fetch_refined_prompt(
     session_id: str,
     fallback_prompt: str,
 ) -> str:
-    final_session = await settings.GOOGLE_BANANA_MODEL_SESSION.get_session(
+    banana_session_service = get_banana_session_service()
+
+    final_session = await banana_session_service.get_session(
         app_name=settings.GOOGLE_AGENT_NAME,
         user_id=user_id,
         session_id=session_id,
@@ -147,6 +162,7 @@ async def run_root_agent(
     session_id: str,
     text_for_agent: str,
 ) -> Optional[str]:
+
     content = types.Content(
         role="user",
         parts=[types.Part.from_text(text=text_for_agent)],

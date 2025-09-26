@@ -15,6 +15,8 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
 
+from app.services.agent.agent_repository import AgentRepository
+from app.services.agent.agent_service import AgentService
 from app.services.user.user_repository import UserRepository
 from app.services.user.user_service import UserService
 from app.utils import security
@@ -79,3 +81,19 @@ def get_user_service(
 
 UserRepositoryDep = Annotated[UserRepository, Depends(get_user_repository)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+
+
+def get_agent_repository(session: SessionDep) -> AgentRepository:
+    """Get agent repository dependency."""
+    return AgentRepository(session)
+
+
+def get_agent_service(
+    repository: Annotated[AgentRepository, Depends(get_agent_repository)],
+) -> AgentService:
+    """Get agent service dependency."""
+    return AgentService(repository)
+
+
+AgentRepositoryDep = Annotated[AgentRepository, Depends(get_agent_repository)]
+AgentServiceDep = Annotated[AgentService, Depends(get_agent_service)]
