@@ -58,5 +58,9 @@
   "ads": {
     "prompt": "Transform the uploaded {juice bottle} into a {cinematic commercial advertisement} where the entire bottle is visually constructed from fresh {fruit type}. Each {grape/fruit} piece should form the shape of the bottle, with natural stems and leaves integrated seamlessly. Add {morning sunlight} and a {vineyard/orchard background} for realism. Highlight {freshness}, {juiciness}, and {natural quality}. The {label of the original bottle} should remain clearly visible on the fruit-formed surface. Style: {photorealistic}, {high detail}, {premium advertising look}. Ratio: {3:4 or 4:5} — ultra-HD quality.{fruit type} = grapes, oranges, pomegranates, strawberries, etc.",
     "category": "style"
+  },
+  "gta": {
+    "prompt": "Create a GTA-style poster artwork featuring the [uploaded person or theme]. Use the signature Rockstar Games poster design: bold cell-shaded illustration, thick outlines, saturated colors, and cinematic framing. Split the poster into multiple dynamic panels, each showing a different scene or action shot of the subject — such as driving, posing, or holding props relevant to the character/theme. Include urban backdrops, neon lights, and dramatic perspectives to capture the gritty yet stylish GTA aesthetic. The overall composition should feel like an official Grand Theft Auto promotional poster, striking and iconic.",
+    "category": "style"
   }
 }
