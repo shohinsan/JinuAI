@@ -1,6 +1,7 @@
 
 
 import asyncio
+import logging
 import uuid
 from io import BytesIO
 from typing import Any, Optional, cast
@@ -8,6 +9,7 @@ from typing import Any, Optional, cast
 from fastapi import UploadFile
 from google import genai
 from google.genai import types
+from google.genai.errors import APIError
 from google.genai.types import (
     GenerateContentConfig,
     HarmBlockThreshold,
@@ -26,6 +28,11 @@ from app.utils.config import get_banana_session_service, settings
 from app.utils.models import ImageCategory, ImageMimeType, ImageRequest, ImageStatus
 
 SYSTEM_AGENT_AUTHOR = "triage_agent"
+
+logger = logging.getLogger(__name__)
+# Reduce noisy warnings from the Google GenAI SDK when responses include
+# structured parts we don't need to inspect directly.
+logging.getLogger("google.genai.types").setLevel(logging.ERROR)
 
 async def ensure_session_exists(user_id: str, session_id: str) -> Session:
     """Return an existing session or create one if absent."""
@@ -71,8 +78,9 @@ async def append_session_event(
 
     content = None
     if text:
+        role = "user" if author == "user" else "model"
         content = types.Content(
-            role=author,
+            role=role,
             parts=[types.Part.from_text(text=text)],
         )
 
@@ -281,26 +289,30 @@ async def run_root_agent(
 
     final_text: Optional[str] = None
 
-    async for event in runner_image.run_async(
-        user_id=user_id,
-        session_id=session_id,
-        new_message=content,
-    ):
-        if event.error_message:
-            raise RuntimeError(event.error_message)
+    try:
+        async for event in runner_image.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=content,
+        ):
+            if event.error_message:
+                raise RuntimeError(event.error_message)
 
-        event_content = getattr(event, "content", None)
-        if event_content and getattr(event_content, "parts", None):
-            text_segments = [
-                getattr(part, "text", "")
-                for part in event_content.parts
-                if getattr(part, "text", None)
-            ]
-            joined = "\n".join(segment.strip() for segment in text_segments if segment)
-            if joined:
-                final_text = joined
+            event_content = getattr(event, "content", None)
+            if event_content and getattr(event_content, "parts", None):
+                text_segments = [
+                    getattr(part, "text", "")
+                    for part in event_content.parts
+                    if getattr(part, "text", None)
+                ]
+                joined = "\n".join(segment.strip() for segment in text_segments if segment)
+                if joined:
+                    final_text = joined
 
-        if event.is_final_response():
-            break
+            if event.is_final_response():
+                break
+    except APIError as exc:
+        logger.warning("Gemini agent run failed: %s", exc)
+        return None
 
     return final_text
