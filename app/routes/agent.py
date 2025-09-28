@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 from typing import List, Optional
@@ -115,6 +116,25 @@ async def preview_refined_prompt(
             refined_prompt=refined_prompt,
             output_format=output_format,
         )
+    except asyncio.CancelledError:
+        session = await finish_session_turn(
+            session,
+            status=ImageStatus.FAILED,
+            title=session_title,
+            interrupted=True,
+        )
+        await append_session_event(
+            session,
+            author=SYSTEM_AGENT_AUTHOR,
+            text="Image generation cancelled by user",
+            custom_metadata={
+                "status": ImageStatus.FAILED.value,
+                "reason": "cancelled_by_user",
+            },
+            turn_complete=True,
+            interrupted=True,
+        )
+        raise
     except Exception as exc:
         session = await finish_session_turn(
             session,
@@ -126,6 +146,7 @@ async def preview_refined_prompt(
             author=SYSTEM_AGENT_AUTHOR,
             text=f"Image generation failed: {exc}",
             custom_metadata={"status": ImageStatus.FAILED.value},
+            turn_complete=True,
         )
         raise
     else:
@@ -151,6 +172,7 @@ async def preview_refined_prompt(
             "status": ImageStatus.COMPLETED.value,
             "output_path": filename,
         },
+        turn_complete=True,
     )
 
     encoded_image = f"data:{output_format.value};base64,{base64.b64encode(final_bytes).decode()}"

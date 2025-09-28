@@ -66,6 +66,8 @@ async def append_session_event(
     text: str | None = None,
     state_delta: dict[str, Any] | None = None,
     custom_metadata: dict[str, Any] | None = None,
+    turn_complete: bool | None = None,
+    interrupted: bool | None = None,
 ) -> Session:
     """Append an event to the session, optionally updating state.
 
@@ -90,6 +92,8 @@ async def append_session_event(
         actions=actions,
         content=content,
         custom_metadata=custom_metadata,
+        turn_complete=turn_complete,
+        interrupted=interrupted,
     )
 
     banana_session_service = get_banana_session_service()
@@ -140,6 +144,7 @@ async def start_session_turn(
             "status": ImageStatus.PROCESSING.value,
             "turn_count": state_delta["turn_count"],
         },
+        turn_complete=False,
     )
 
 
@@ -148,6 +153,7 @@ async def finish_session_turn(
     *,
     status: ImageStatus,
     title: str | None = None,
+    interrupted: bool | None = None,
 ) -> Session:
     """Store the final status for the session turn."""
 
@@ -165,6 +171,8 @@ async def finish_session_turn(
         state_delta=state_delta,
         text=f"Session turn {status.value.lower()}",
         custom_metadata=metadata,
+        turn_complete=True,
+        interrupted=interrupted,
     )
 
 
