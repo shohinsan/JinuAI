@@ -10,8 +10,6 @@ This project is an **AI-powered image generation application** that enables user
 - **Lightbox (Product) Mode** – Showcase and edit product images.  
 - **Style (Template) Mode** – Apply predefined templates or styles to images.  
 
----
-
 ### Requirements & References
 > ⚠️ **Important:** This project **requires the `GOOGLE_AI_SDK`** to function properly.  
 
@@ -21,51 +19,14 @@ This project is an **AI-powered image generation application** that enables user
 
 💡 **Tip:** When making decisions on **session management**, check what the provider gives out-of-the-box (e.g., OpenAI Agents SDK or Google A2A).  
 
----
-
 ## Agent Built-in Session Service (Database Schema)
 
-### Tables
-
-#### `sessions`
-- **id**
-- **app_name**
-- **user_id**
-- **state**
-- **create_time**
-- **update_time**
-
-#### `events`
-- **id**
-- **app_name**
-- **user_id**
-- **session_id**
-- **invocation_id**
-- **author**
-- **actions**
-- **branch**
-- **timestamp**
-- **content**
-- **grounding_metadata**
-- **custom_metadata**
-- **partial**
-- **turn_complete**
-- **error_code**
-- **error_message**
-- **interrupted**
-
-#### `app_states`
-- **app_name**
-- **state**
-- **update_time**
-
-#### `user_states`
-- **app_name**
-- **user_id**
-- **state**
-- **update_time**
-
----
+| Table        | Key Fields                                                                 |
+|--------------|----------------------------------------------------------------------------|
+| **sessions** | `id`, `app_name`, `user_id`, `state`, `create_time`, `update_time`         |
+| **events**   | `id`, `app_name`, `user_id`, `session_id`, `invocation_id`, `author`, `actions`, `branch`, `timestamp`, `content`, `grounding_metadata`, `custom_metadata`, `partial`, `turn_complete`, `error_code`, `error_message`, `interrupted` |
+| **app_states** | `app_name`, `state`, `update_time`                                       |
+| **user_states** | `app_name`, `user_id`, `state`, `update_time`                           |
 
 ## Core File Structure
 
