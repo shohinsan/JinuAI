@@ -6,13 +6,16 @@ from fastapi import APIRouter, File, Form, UploadFile
 from app.utils.agent_helpers import (
     ensure_session_exists,
     fetch_refined_prompt,
+    finish_session_turn,
+    append_session_event,
     generate_image_bytes,
     prepare_upload_payloads,
     resolve_prompt_and_category,
     run_root_agent,
+    start_session_turn,
 )
 from app.utils.config import settings
-from app.utils.delegate import AgentServiceDep, CurrentUser
+from app.utils.delegate import CurrentUser
 from app.utils.models import (
     ImageCategory,
     ImageMimeType,
@@ -36,7 +39,6 @@ async def preview_refined_prompt(
     category: Optional[ImageCategory] = Form(None),
     *,
     current_user: CurrentUser,
-    agent_service: AgentServiceDep,
 ):
     request = ImageRequest(
         prompt=prompt,
@@ -49,12 +51,12 @@ async def preview_refined_prompt(
         category=category,
     )
 
-    user_uuid = current_user.id
-    user_id = str(user_uuid)
+    user_id = str(current_user.id)
 
     session_id = session_id or str(uuid.uuid4())
 
-    await ensure_session_exists(user_id, session_id)
+    session = await ensure_session_exists(user_id, session_id)
+    session_id = session.id
 
     file_payloads = await prepare_upload_payloads(request.files)
     resolved_prompt, category, normalized_style = resolve_prompt_and_category(request)
@@ -65,15 +67,19 @@ async def preview_refined_prompt(
     title_source = request.prompt or resolved_prompt
     session_title = (title_source or "Image request")[:200]
 
-    agent_service.start_turn(
-        app_name=settings.GOOGLE_AGENT_NAME,
-        agent_name="triage_agent",
-        session_id=session_id,
-        user_id=user_uuid,
-        title=session_title,
-    )
+    session = await start_session_turn(session, title=session_title)
 
-
+    user_event_metadata = {
+        "category": category.value if category else None,
+        "size": size.value if isinstance(size, ImageSize) else str(size),
+        "style": normalized_style,
+        "aspect_ratio": request.aspect_ratio.value if request.aspect_ratio else None,
+    }
+    user_event_metadata = {
+        key: value
+        for key, value in user_event_metadata.items()
+        if value is not None
+    }
 
     text_for_agent = "\n\n".join(
         filter(
@@ -90,6 +96,13 @@ async def preview_refined_prompt(
         )
     )
 
+    session = await append_session_event(
+        session,
+        author="user",
+        text=text_for_agent,
+        custom_metadata=user_event_metadata or None,
+    )
+
     try:
         await run_root_agent(user_id, session_id, text_for_agent)
 
@@ -102,22 +115,22 @@ async def preview_refined_prompt(
             refined_prompt=refined_prompt,
             output_format=output_format,
         )
-    except Exception:
-        agent_service.finish_turn(
-            app_name=settings.GOOGLE_AGENT_NAME,
-            agent_name="triage_agent",
-            session_id=session_id,
-            user_id=user_uuid,
+    except Exception as exc:
+        session = await finish_session_turn(
+            session,
             status=ImageStatus.FAILED,
             title=session_title,
         )
+        await append_session_event(
+            session,
+            author=settings.GOOGLE_AGENT_NAME,
+            text=f"Image generation failed: {exc}",
+            custom_metadata={"status": ImageStatus.FAILED.value},
+        )
         raise
     else:
-        agent_service.finish_turn(
-            app_name=settings.GOOGLE_AGENT_NAME,
-            agent_name="triage_agent",
-            session_id=session_id,
-            user_id=user_uuid,
+        session = await finish_session_turn(
+            session,
             status=ImageStatus.COMPLETED,
             title=session_title,
         )
@@ -130,6 +143,16 @@ async def preview_refined_prompt(
     with open(out_path, "wb") as f:
         f.write(final_bytes)
 
+    session = await append_session_event(
+        session,
+        author=settings.GOOGLE_AGENT_NAME,
+        text="Image generation completed",
+        custom_metadata={
+            "status": ImageStatus.COMPLETED.value,
+            "output_path": filename,
+        },
+    )
+
     encoded_image = f"data:{output_format.value};base64,{base64.b64encode(final_bytes).decode()}"
 
     return ImageResponse(
@@ -138,7 +161,7 @@ async def preview_refined_prompt(
         size=size.value if isinstance(size, ImageSize) else str(size),
         style=request.style,
         aspect_ratio=request.aspect_ratio.value if request.aspect_ratio else None,
-        session_id=session_id,
+        session_id=session.id,
         category=category.value if category else None,
         user_id=user_id,
         output_file=encoded_image,

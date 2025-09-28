@@ -43,7 +43,7 @@ def get_{domain}_service(
 
 **agent_helpers.py**:
 - Async utility layer for the agent workflow: session bootstrapping, upload preparation, prompt resolution, and final image generation.
-- `ensure_session_exists` must be called before orchestrator runs; never mutate session state outside this module.
+- All writes to the ADK persistence layer (sessions, user/app state, events) go through helpers here; `ensure_session_exists`, `start_session_turn`, `finish_session_turn`, and `append_session_event` keep state changes consistent.
 - Keep `prepare_upload_payloads` lossless—perform normalization only (no resizing) and preserve MIME types resolved via Pillow.
 - `generate_image_bytes` is the single entry for Google GenAI calls; update safety thresholds or response parsing here and keep the async executor boundary intact.
 - `run_root_agent` streams events from `runner_image`; funnel new result fields through the generator loop without breaking final-response detection.

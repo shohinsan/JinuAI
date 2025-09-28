@@ -1,8 +1,9 @@
 
 
 import asyncio
+import uuid
 from io import BytesIO
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 from fastapi import UploadFile
 from google import genai
@@ -14,15 +15,19 @@ from google.genai.types import (
     Part,
     SafetySetting,
 )
+
+from google.adk.events.event import Event
+from google.adk.events.event_actions import EventActions
+from google.adk.sessions import Session
 from PIL import Image
 
 from app.utils.agent_tool import get_predefined_styles
 from app.utils.config import get_banana_session_service, settings
-from app.utils.models import ImageCategory, ImageMimeType, ImageRequest
+from app.utils.models import ImageCategory, ImageMimeType, ImageRequest, ImageStatus
 
 
-async def ensure_session_exists(user_id: str, session_id: str) -> None:
-    # Ensure session exists
+async def ensure_session_exists(user_id: str, session_id: str) -> Session:
+    """Return an existing session or create one if absent."""
 
     banana_session_service = get_banana_session_service()
 
@@ -31,13 +36,104 @@ async def ensure_session_exists(user_id: str, session_id: str) -> None:
         user_id=user_id,
         session_id=session_id,
     )
-    if not session:
-        await banana_session_service.create_session(
+
+    if session is None:
+        session = await banana_session_service.create_session(
             app_name=settings.GOOGLE_AGENT_NAME,
             user_id=user_id,
             session_id=session_id,
-            state={},
+            state={
+                "status": ImageStatus.PENDING.value,
+                "turn_count": 0,
+            },
         )
+
+    return session
+
+
+async def append_session_event(
+    session: Session,
+    *,
+    author: str,
+    text: str | None = None,
+    state_delta: dict[str, Any] | None = None,
+    custom_metadata: dict[str, Any] | None = None,
+) -> Session:
+    """Append an event to the session, optionally updating state."""
+
+    actions = EventActions(state_delta=state_delta or {})
+
+    content = None
+    if text:
+        content = types.Content(
+            role=author,
+            parts=[types.Part.from_text(text=text)],
+        )
+
+    event = Event(
+        author=author,
+        invocation_id=str(uuid.uuid4()),
+        actions=actions,
+        content=content,
+        custom_metadata=custom_metadata,
+    )
+
+    banana_session_service = get_banana_session_service()
+    await banana_session_service.append_event(session=session, event=event)
+
+    return session
+
+
+async def start_session_turn(
+    session: Session,
+    *,
+    title: str | None = None,
+) -> Session:
+    """Increment turn count and mark the session as processing."""
+
+    existing_turns = int(session.state.get("turn_count", 0) or 0)
+    state_delta: dict[str, object] = {
+        "status": ImageStatus.PROCESSING.value,
+        "turn_count": existing_turns + 1,
+    }
+    if title is not None:
+        state_delta["title"] = title
+
+    return await append_session_event(
+        session,
+        author=settings.GOOGLE_AGENT_NAME,
+        state_delta=state_delta,
+        text="Session turn started",
+        custom_metadata={
+            "status": ImageStatus.PROCESSING.value,
+            "turn_count": state_delta["turn_count"],
+        },
+    )
+
+
+async def finish_session_turn(
+    session: Session,
+    *,
+    status: ImageStatus,
+    title: str | None = None,
+) -> Session:
+    """Store the final status for the session turn."""
+
+    state_delta: dict[str, object] = {"status": status.value}
+    if title is not None:
+        state_delta["title"] = title
+
+    metadata: dict[str, Any] = {"status": status.value}
+    if title is not None:
+        metadata["title"] = title
+
+    return await append_session_event(
+        session,
+        author=settings.GOOGLE_AGENT_NAME,
+        state_delta=state_delta,
+        text=f"Session turn {status.value.lower()}",
+        custom_metadata=metadata,
+    )
 
 
 async def prepare_upload_payloads(files: list[UploadFile]) -> list[tuple[bytes, str]]:

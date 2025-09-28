@@ -256,54 +256,6 @@ class EmailPasswordLogin(SQLModel):
 
 
 
-"""
-============================================================
-AGENT SESSIONS MODULE
-============================================================
-Persistent records for per-user agent sessions/chats.
-"""
-
-
-class Agents(SQLModel, table=True):
-    """Agent session/chat record."""
-    __tablename__ = "agents"
-
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-
-    app_name: str = Field(index=True, max_length=64)
-    agent: str = Field(index=True, max_length=128)  # logical agent name/id
-    session_id: str = Field(index=True, max_length=64)
-
-    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
-
-    title: str | None = Field(default=None, max_length=200)
-    status: ImageStatus = Field(default=ImageStatus.PENDING, index=True)
-    turn_count: int = Field(default=0)
-
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-class AgentCreate(SQLModel):
-    """Payload for creating an agent session record."""
-
-    app_name: str
-    agent: str
-    session_id: str
-    user_id: uuid.UUID
-    title: str | None = None
-    status: ImageStatus = ImageStatus.PENDING
-    turn_count: int = 0
-
-
-class AgentUpdate(SQLModel):
-    """Payload for updating an agent session record."""
-
-    title: str | None = None
-    status: ImageStatus | None = None
-    turn_count: int | None = None
-
-
 # ===========================================================
 # DO NOT TOUCH THIS CODE, I PUT THIS HERE TO WORK ON LATER
 # ============================================================
