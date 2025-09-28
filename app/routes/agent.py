@@ -13,8 +13,8 @@ from app.utils.agent_helpers import (
     resolve_prompt_and_category,
     run_root_agent,
     start_session_turn,
+    SYSTEM_AGENT_AUTHOR,
 )
-from app.utils.config import settings
 from app.utils.delegate import CurrentUser
 from app.utils.models import (
     ImageCategory,
@@ -123,7 +123,7 @@ async def preview_refined_prompt(
         )
         await append_session_event(
             session,
-            author=settings.GOOGLE_AGENT_NAME,
+            author=SYSTEM_AGENT_AUTHOR,
             text=f"Image generation failed: {exc}",
             custom_metadata={"status": ImageStatus.FAILED.value},
         )
@@ -145,7 +145,7 @@ async def preview_refined_prompt(
 
     session = await append_session_event(
         session,
-        author=settings.GOOGLE_AGENT_NAME,
+        author=SYSTEM_AGENT_AUTHOR,
         text="Image generation completed",
         custom_metadata={
             "status": ImageStatus.COMPLETED.value,

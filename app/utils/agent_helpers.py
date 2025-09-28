@@ -25,6 +25,7 @@ from app.utils.agent_tool import get_predefined_styles
 from app.utils.config import get_banana_session_service, settings
 from app.utils.models import ImageCategory, ImageMimeType, ImageRequest, ImageStatus
 
+SYSTEM_AGENT_AUTHOR = "triage_agent"
 
 async def ensure_session_exists(user_id: str, session_id: str) -> Session:
     """Return an existing session or create one if absent."""
@@ -59,7 +60,12 @@ async def append_session_event(
     state_delta: dict[str, Any] | None = None,
     custom_metadata: dict[str, Any] | None = None,
 ) -> Session:
-    """Append an event to the session, optionally updating state."""
+    """Append an event to the session, optionally updating state.
+
+    ADK expects the session object to carry the latest `last_update_time`. We
+    re-fetch the session before and after appending to avoid stale-state errors
+    when multiple events land quickly.
+    """
 
     actions = EventActions(state_delta=state_delta or {})
 
@@ -79,9 +85,27 @@ async def append_session_event(
     )
 
     banana_session_service = get_banana_session_service()
-    await banana_session_service.append_event(session=session, event=event)
 
-    return session
+    latest_session = await banana_session_service.get_session(
+        app_name=session.app_name,
+        user_id=session.user_id,
+        session_id=session.id,
+    )
+
+    session_for_write = latest_session or session
+
+    await banana_session_service.append_event(
+        session=session_for_write,
+        event=event,
+    )
+
+    refreshed = await banana_session_service.get_session(
+        app_name=session.app_name,
+        user_id=session.user_id,
+        session_id=session.id,
+    )
+
+    return refreshed or session_for_write
 
 
 async def start_session_turn(
@@ -101,7 +125,7 @@ async def start_session_turn(
 
     return await append_session_event(
         session,
-        author=settings.GOOGLE_AGENT_NAME,
+        author=SYSTEM_AGENT_AUTHOR,
         state_delta=state_delta,
         text="Session turn started",
         custom_metadata={
@@ -129,7 +153,7 @@ async def finish_session_turn(
 
     return await append_session_event(
         session,
-        author=settings.GOOGLE_AGENT_NAME,
+        author=SYSTEM_AGENT_AUTHOR,
         state_delta=state_delta,
         text=f"Session turn {status.value.lower()}",
         custom_metadata=metadata,
