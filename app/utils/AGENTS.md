@@ -54,8 +54,8 @@ def get_{domain}_service(
 - Add new tools by updating both the agent config and the corresponding helper/tool modules, then register them on the correct sub-agent list.
 - `Runner` wiring must always include `settings.GOOGLE_BANANA_MODEL_SESSION` and `prompt_input_guardrail`; do not bypass the guardrail in production flows.
 
-**agent_tool.py**:
-- Loads style presets from `app/routes/style.json` and exposes them through a ADK `FunctionTool` for use inside agents.
+- **agent_tool.py**:
+- Style presets live in the `STYLE_PRESETS_RAW` constant; extend that mapping when adding new prompts so the tool stays source-controlled.
 - Preserve the lazy mapping contract of `STYLE_PRESETS`; new preset keys must normalize to lowercase, and non-existent styles must return `(None, None, None)`.
 - Extend `get_predefined_styles` when introducing namespaced style semantics; maintain compatibility with `ImageStyle` enums.
 - `style_function_tool.custom_metadata` should mirror the underlying schema; update the declaration when changing arguments or return shapes so ADK reflection stays accurate.

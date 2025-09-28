@@ -1,27 +1,34 @@
 
-import json
-from pathlib import Path
 from typing import List, Optional, Tuple
+
 from app.utils.models import ImageCategory, ImageStyle
 from google.adk.tools import FunctionTool
-from google.genai.types import Tool, FunctionDeclaration, Schema, Type
+from google.genai.types import FunctionDeclaration, Schema, Tool, Type
 
 
-STYLE_PRESETS_PATH = (
-    Path(__file__).resolve().parent.parent / "routes" / "style.json"
-)
-
-with STYLE_PRESETS_PATH.open("r", encoding="utf-8") as preset_file:
-    raw_presets: dict[str, dict[str, str]] = json.load(preset_file)
+STYLE_PRESETS_RAW: dict[str, str] = {
+    "polaroid": "Create an authentic Polaroid-style snapshot that naturally combines two people in the same frame, capturing them in a spontaneous moment. Use gentle flash lighting that falls off around the edges to enhance the retro aesthetic, and add a subtle motion blur to suggest movement while keeping both individuals' facial features unchanged to avoid distortion or smoothing. Place them against a simple off-white curtain background reminiscent of a casual living room, and preserve the intimate pose of the two people hugging as they look toward the camera.",
+    "figure": "Create a 1/7 scale commercialized figurine of the character in the picture, designed in a realistic style and placed within a real environment on a computer desk. The figurine should stand on a round transparent acrylic base, while the computer screen beside it displays the 3D modeling process of this same figurine, creating a natural connection between the physical and digital forms. Next to the monitor, include a toy packaging box styled like a high-quality collectible figure, printed with original artwork that features two-dimensional flat illustrations of the figurine, seamlessly tying the presentation together.",
+    "foodie": "Photograph this product on a table against a solid background, styled in a dramatic modern scene where the key ingredients appear fresh and raw, flying outward in an explosive dynamic arrangement that highlights both freshness and nutritional value. Present the composition as a promotional ad shot without text, ensuring the product remains the central focus while the background incorporates the key brand colors to unify the overall visual impact.",
+    "explosive": "Double exposure, Midjourney style, merging, blending, and overlaying in a stunning composition inspired by Yukisakura. Create an exceptional double exposure masterpiece where the silhouette of the uploaded human figure is harmoniously intertwined with visually striking, rugged landscapes during a lively spring season. Within the silhouette, reveal sun-bathed pine forests, towering mountain peaks, and a lone horse cutting through the trail, each element echoing outward to add depth, narrative, and solitude. Build beautiful tension by setting the figure against a stark monochrome background that maintains razor-sharp contrast, drawing all focus to the richly layered double exposure. Characterize the piece with a vibrant full-color scheme inside the silhouette and crisp, deliberate lines that trace every contour with emotional precision.",
+    "card": "A close-up shot of a hand holding a business card designed to look like a JSON file opened in VS Code, with realistic syntax-highlighted JSON code. The card appears exactly like a VS Code window, complete with toolbar icons and a title bar labeled Business Card.json. The background is softly blurred to keep the focus on the card. The JSON on the card dynamically displays user information in this format: { 'name': 'actual name', 'title': 'actual title', 'email': 'actual email', 'link': 'actual link' }, rendered as realistic highlighted code inside the card.",
+    "bubblehead": "Turn this photo into a bobblehead: enlarge the head slightly, keep the face accurate and cartoonify the body. [Place it on a bookshelf].",
+    "keychain": "A close-up photo of a cute, colorful keychain held by person's hand. The keychain features a chibi-style of the [attached image ]. The keychain is made of soft rubber with bold black outlines and attached to a small silver keyring, neutral background",
+    "cyberpank": "A highly detailed miniature [Cyberpunk] landscape viewed from above, using a tilt-shift lens effect. The scene is filled with toy-like elements, all rendered in high-resolution CG. Dramatic lighting creates a cinematic atmosphere, with vivid colors and strong contrast, emphasizing depth of field and a realistic micro-perspective, making the viewer feel as if overlooking a toy world. The image contains many visual jokes and details worth repeated viewing. Take uploaded image as the reference",
+    "gaming": "Ultra-realistic 3D rendered image that replicates the character design of the person from the uploaded image. The scene is set in a dim and cluttered bedroom from the year 2008. Take the carachter from uploaded image, keep the face and all other details consistent.The character is sitting on the carpet, facing an old-fashioned television that is playing Command & Conquer: Red Alert 3 and a game console controller. The entire room is filled with a nostalgic atmosphere of the year 2008: snack packaging bags, soda cans, posters, and tangled wires are everywhere.The person from the image is captured in the moment of turning her or his head, looking back at the camera over theshoulder. There is an innocent smile on persons iconic ethereally beautiful face. Upper body is slightly twisted, with a natural dynamic, as if person is reacting to being startled by the flash. The flash slightly overexposes face and clothes, making the silhouette stand out more prominently in the dimly lit room. The whole photo appears raw and natural. The strong contrast between light and dark casts deep shadows behind the person. The image is full of tactile feel, with a simulated texture that resembles an authentic film snapshot from 2008. If user inputs different theme - change the video on the screen and the posters in the room accordingly",
+    "aging": "A hyper-realistic portrait of [uploaded person], aged to approximately 60 years old. Preserve the person’s facial identity and unique features, but naturally add signs of aging: subtle wrinkles, fine lines, slight sagging skin, natural gray or salt-and-pepper hair, and softened facial contours. Keep the look elegant and dignified, with realistic skin texture and details. Studio photography lighting, cinematic sharpness, ultra-detailed, high-resolution, professional editorial portrait style.",
+    "bench": "Hyper-real studio portrait of [uploaded image] lounging on a park bench; low camera angle with one sneaker sole big in the foreground (strong foreshortening). Bench is painted/wrapped with [the brand that user inputs if none then user any of famous brands, dont ask user to insert it] colors and graphics. Seamless [the colors that user inputs if none - set random bright color yourself, dont ask user] background, premium magazine lighting, soft shadows, clean minimal set, sharp focus, ultra-detailed skin/fabric, 3:4 ratio, no watermark.",
+    "restore": "Please this old photo into 1080 x 1920 pixels, with an aesthetic and modern photography look, making it appear authentic and keep the colors realistic.",
+    "isometric": "Isometric 3D render of [of uploaded image or the text prompt of the user or both], on a plain white background. Soft, even lighting with smooth shadows. Clean, sharp focus, high detail, and warm, natural colors. High-resolution, Blender-style quality.",
+    "burning": "A close-up, cinematic portrait of [uploaded person photo] sitting at the open door of a classic car at night. The scene is filled with blazing orange light, glowing embers, and swirling sparks surrounding the car, as if the air itself is alive with heat and energy. The brilliant glow reflects on the person’s face, highlighting a fearless, intense expression with sharp shadows. The shot is closer, emphasizing the dramatic aura, radiant atmosphere, and fiery background that engulfs the scene. Hyper-detailed, photorealistic, gritty, and cinematic style with vivid contrast and glowing intensity.",
+    "ads": "Transform the uploaded {juice bottle} into a {cinematic commercial advertisement} where the entire bottle is visually constructed from fresh {fruit type}. Each {grape/fruit} piece should form the shape of the bottle, with natural stems and leaves integrated seamlessly. Add {morning sunlight} and a {vineyard/orchard background} for realism. Highlight {freshness}, {juiciness}, and {natural quality}. The {label of the original bottle} should remain clearly visible on the fruit-formed surface. Style: {photorealistic}, {high detail}, {premium advertising look}. Ratio: {3:4 or 4:5} — ultra-HD quality.{fruit type} = grapes, oranges, pomegranates, strawberries, etc.",
+    "gta": "Create a GTA-style poster artwork featuring the [uploaded person or theme]. Use the signature Rockstar Games poster design: bold cell-shaded illustration, thick outlines, saturated colors, and cinematic framing. Split the poster into multiple dynamic panels, each showing a different scene or action shot of the subject — such as driving, posing, or holding props relevant to the character/theme. Include urban backdrops, neon lights, and dramatic perspectives to capture the gritty yet stylish GTA aesthetic. The overall composition should feel like an official Grand Theft Auto promotional poster, striking and iconic.",
+}
 
 STYLE_PRESETS: dict[str, Tuple[str, ImageCategory]] = {
-    key.lower().strip(): (
-        str(entry.get("prompt", "")).strip(),
-        ImageCategory(entry.get("category", ImageCategory.TEMPLATE.value))
-        if entry.get("category") in ImageCategory._value2member_map_
-        else ImageCategory.TEMPLATE,
-    )
-    for key, entry in raw_presets.items()
+    key.strip().lower(): (prompt.strip(), ImageCategory.TEMPLATE)
+    for key, prompt in STYLE_PRESETS_RAW.items()
+    if prompt.strip()
 }
 
 

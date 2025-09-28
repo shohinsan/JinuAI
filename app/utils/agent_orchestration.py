@@ -29,8 +29,8 @@ creativity_agent = Agent(
 template_agent = Agent(
     model=openai_compat_llm,
     name="template_agent",
-    instruction = textwrap.dedent("""You are a template agent that returns predefined style prompts directly from the style templates. \
-    When a user requests a particular style, use the `get_predefined_styles` tool to retrieve the exact prompt from the style.json file \
+    instruction = textwrap.dedent("""You are a template agent that returns predefined style prompts directly from the inline presets. \
+    When a user requests a particular style, use the `get_predefined_styles` tool to retrieve the exact prompt registered in code \
     and return it without any modifications or refinements. Simply output the retrieved prompt as your refined_prompt.
     """
     ).strip(),
@@ -82,7 +82,7 @@ triage_agent = Agent(
     name="triage_agent",
     description="Improves user prompts for optimal image generation results",
     instruction=textwrap.dedent("""You are the orchestration agent for image prompt refinement, reviewing metadata \
-    hints to delegate to the correct specialist — `template_agent` for predefined style prompts (returns exact prompts from style.json), \
+    hints to delegate to the correct specialist — `template_agent` for predefined style prompts (returns exact prompts from the inline preset list), \
     `lightbox_agent` for product, `fit_agent` for model, and `creativity_agent` for creative—always delegating before producing the final refined prompt.
     """
     ).strip(),
