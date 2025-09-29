@@ -1,22 +1,12 @@
 import textwrap
-from app.llm.openai_llm import OpenAIChatLlm
-from openai import AsyncOpenAI
 from google.adk.agents import Agent
 from google.adk.runners import Runner
 from app.utils.agent_guardrail import prompt_input_guardrail
 from app.utils.agent_tool import style_function_tool
 from app.utils.config import get_banana_session_service, settings
 
-openai_compat_llm = OpenAIChatLlm(
-    model="gemma3:12b",
-    client=AsyncOpenAI(
-        base_url="http://localhost:11434/v1",
-        api_key="ollama",
-    ),
-)
-
 creativity_agent = Agent(
-    model=openai_compat_llm,
+    model=settings.FLASH_TEXT,
     name="creativity_agent",
     instruction=textwrap.dedent("""You are a creative agent that refines user prompts for image generation. \
     Craft a refined, realistic photograph based on the uploaded image.
@@ -27,7 +17,7 @@ creativity_agent = Agent(
 )
 
 template_agent = Agent(
-    model=openai_compat_llm,
+    model=settings.FLASH_TEXT,
     name="template_agent",
     instruction = textwrap.dedent("""You are a template agent that returns predefined style prompts directly from the inline presets. \
     When a user requests a particular style, use the `get_predefined_styles` tool to retrieve the exact prompt registered in code \
@@ -40,7 +30,7 @@ template_agent = Agent(
 
 
 lightbox_agent = Agent(
-    model=openai_compat_llm,
+    model=settings.FLASH_TEXT,
     name="lightbox_agent",
     instruction=textwrap.dedent("""When refining prompts, always start with \
     "A high-resolution, studio-lit product photograph of a [product type] from the first image in the setting of the second image," \
@@ -58,7 +48,7 @@ lightbox_agent = Agent(
 
 
 fit_agent = Agent(
-    model=openai_compat_llm,
+    model=settings.FLASH_TEXT,
     name="fit_agent",
     instruction=textwrap.dedent("""When refining prompts, always start with "Create a new image by combining the [garment type] \
     from the first image onto the person shown in the second image," avoid inventing specifics by using neutral phrasing like \
