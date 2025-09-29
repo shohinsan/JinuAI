@@ -45,8 +45,9 @@ This project is an **AI-powered image generation application** that enables user
 
 ## Model Selection
 
-FLASH_TEXT: ClassVar[str] = "gemini-2.5-flash"
-FLASH_IMAGE: ClassVar[str] = "gemini-2.5-flash-image-preview"
+FLASH_TEXT: ClassVar[str] = `"gemini-2.5-flash"`
+
+FLASH_IMAGE: ClassVar[str] = `"gemini-2.5-flash-image-preview"`
 
 > Change the model to your liking
 
