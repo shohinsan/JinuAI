@@ -49,7 +49,7 @@ FLASH_TEXT: ClassVar[str] = `"gemini-2.5-flash"`
 
 FLASH_IMAGE: ClassVar[str] = `"gemini-2.5-flash-image-preview"`
 
-> Change the model to your liking
+> Change the model to your liking.
 
 ## Project Philosophy
 
