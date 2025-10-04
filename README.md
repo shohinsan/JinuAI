@@ -19,6 +19,29 @@ This project is an **AI-powered image generation application** that enables user
 
 💡 **Tip:** When making decisions on **session management**, check what the provider gives out-of-the-box (e.g., OpenAI Agents SDK or Google A2A).  
 
+## Object Storage (MinIO)
+
+Generated images and reusable assets can be synced to a MinIO cluster in addition to the local `generated-img/` folder. Configure the storage client through the following environment variables:
+
+```
+MINIO_ENDPOINT=<host:port>
+MINIO_ACCESS_KEY=<access-key>
+MINIO_SECRET_KEY=<secret-key>
+MINIO_REGION=<optional-region>
+MINIO_SECURE=<true|false>
+MINIO_BUCKET_NAME=jinuai-assets
+MINIO_PREFIX_MODELS=models
+MINIO_PREFIX_STYLES=styles
+MINIO_PREFIX_MEDIA=media
+```
+
+When enabled, the API writes:
+- `models/` – checkpoints or artifact uploads.
+- `styles/fit|template|product/` – curated style references.
+- `media/<user-id>/` – generated images associated with each user for powering "My Media" views on the frontend.
+
+The service creates placeholder objects so the folder layout is visible immediately within the MinIO console.
+
 ## Agent Built-in Session Service (Database Schema)
 
 | Table        | Key Fields                                                                 |

@@ -11,6 +11,7 @@ from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import UploadFile
 from pydantic import BaseModel, BeforeValidator, EmailStr, AliasChoices, field_validator
+from sqlalchemy import Column, JSON
 from sqlmodel import Field, Relationship, SQLModel
 
 # ============================================================
@@ -87,6 +88,60 @@ class ImageAspectRatio(str, Enum):
     TALL = "9:16"
     WIDE = "16:9"
 
+
+class AssetType(str, Enum):
+    """Asset collection types matching MinIO structure"""
+    MEDIA = "media"      # Generated AI images (output)
+    MODEL = "model"      # Reference model photos
+    STYLE = "style"      # Style templates (fit/template/product)
+
+
+# ============================================================
+# ASSET MODULE
+# ============================================================
+
+
+class Asset(SQLModel, table=True):
+    """Tracks all images/assets stored in MinIO."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+
+    # Storage location
+    object_path: str = Field(max_length=500, index=True, unique=True)
+    bucket_name: str = Field(default="jinuai-assets", max_length=100)
+
+    # Classification
+    asset_type: AssetType = Field(index=True)
+    style_subcategory: str | None = Field(default=None, max_length=50, index=True)
+
+    # File metadata
+    filename: str = Field(max_length=255)
+    mime_type: str = Field(max_length=50)
+    file_size: int | None = Field(default=None)
+    width: int | None = Field(default=None)
+    height: int | None = Field(default=None)
+
+    # Ownership & generation tracking
+    user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    session_id: str | None = Field(default=None, max_length=100, index=True)
+
+    # For media (generated images): track what was used to create it
+    source_model_ids: list[uuid.UUID] | None = Field(default=None, sa_column=Column(JSON))
+    source_style_id: uuid.UUID | None = Field(default=None, foreign_key="asset.id")
+    refined_prompt: str | None = Field(default=None, max_length=2000)
+
+    # Status
+    is_active: bool = Field(default=True, index=True)
+    is_public: bool = Field(default=False)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    deleted_at: datetime | None = Field(default=None)
+
+    # Relationships
+    user: "User" = Relationship(back_populates="assets")
+
+
 # ============================================================
 # PHOTO MODULE
 # ============================================================
@@ -145,6 +200,7 @@ class User(UserBase, table=True):
     avatar_photo: Photo | None = Relationship(back_populates=None)
 
     # Relationships
+    assets: list["Asset"] = Relationship(back_populates="user")
 
 
 # User Schemas
@@ -271,6 +327,7 @@ class ImageRequest(BaseModel):
     output_format: Optional[ImageMimeType] = Field(default=ImageMimeType.PNG, description="Output image format")
     session_id: Optional[str] = Field(default=None, description="Session identifier to persist state")
     category: Optional[ImageCategory] = Field(None, description="Routing category: 'style', 'model' or 'product'")
+    model_filename: Optional[str] = Field(default=None, description="Static model filename to include when category is 'fit'")
 
 
 @field_validator("files")
@@ -358,3 +415,26 @@ class ImageResponse(BaseModel):
     category: str | None = None
     user_id: str
     output_file: Optional[str] = None
+    media_object_path: Optional[str] = None
+
+
+class UserMediaItem(BaseModel):
+    """Metadata returned when listing previously generated media."""
+
+    filename: str
+    object_path: str
+    local_path: Optional[str] = None
+    collection: Optional[str] = None
+    style: Optional[str] = None
+    size: Optional[int] = None
+    last_modified: Optional[datetime] = None
+
+
+class PromptSearchResult(BaseModel):
+    """Response model when searching agent sessions for prompts."""
+
+    session_id: str
+    refined_prompt: Optional[str] = None
+    title: Optional[str] = None
+    status: Optional[ImageStatus] = None
+    last_update_time: float

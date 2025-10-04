@@ -7,10 +7,11 @@ leveraging Pydantic for type safety and environment variable support.
 
 import secrets
 import warnings
-from typing import Annotated, Any, Literal, Self, ClassVar
+from typing import Annotated, Any, ClassVar, Literal, Self
+
 from google import genai
 from google.adk.sessions import DatabaseSessionService
-
+from minio import Minio
 from pydantic import (
     AnyUrl,
     BeforeValidator,
@@ -36,7 +37,7 @@ def parse_cors(v: Any) -> list[str] | str:
 
 def get_banana_session_service() -> DatabaseSessionService:
     """Return the shared ADK database session service."""
-    
+
     session = Settings.GOOGLE_BANANA_MODEL_SESSION
     if session is None:
         session = DatabaseSessionService(
@@ -153,6 +154,8 @@ class Settings(BaseSettings):
     
     GOOGLE_BANANA_MODEL_SESSION: ClassVar[DatabaseSessionService | None] = None
 
+    MINIO_CLIENT: ClassVar[Minio | None] = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def google_genai_client(self) -> genai.Client | None:
@@ -164,6 +167,43 @@ class Settings(BaseSettings):
                 vertexai=False,
             )
         return self.GOOGLE_GENAI_CLIENT
+
+    MINIO_ENDPOINT: str | None = None
+    MINIO_ACCESS_KEY: str | None = None
+    MINIO_SECRET_KEY: str | None = None
+    MINIO_REGION: str | None = None
+    MINIO_SECURE: bool = False
+    MINIO_BUCKET_NAME: str = "jinuai-assets"
+    MINIO_PREFIX_MODELS: str = "models"
+    MINIO_PREFIX_STYLES: str = "styles"
+    MINIO_PREFIX_MEDIA: str = "media"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_enabled(self) -> bool:
+        return bool(
+            self.MINIO_ENDPOINT
+            and self.MINIO_ACCESS_KEY
+            and self.MINIO_SECRET_KEY
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_client(self) -> Minio | None:
+        if not self.minio_enabled:
+            return None
+        if self.MINIO_CLIENT is None:
+            endpoint = self.MINIO_ENDPOINT or ""
+            access_key = self.MINIO_ACCESS_KEY or ""
+            secret_key = self.MINIO_SECRET_KEY or ""
+            Settings.MINIO_CLIENT = Minio(
+                endpoint=endpoint,
+                access_key=access_key,
+                secret_key=secret_key,
+                region=self.MINIO_REGION,
+                secure=self.MINIO_SECURE,
+            )
+        return self.MINIO_CLIENT
 
 
 
@@ -197,4 +237,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
-

@@ -1,10 +1,12 @@
 
 
 import asyncio
+import base64
+import binascii
 import logging
 import uuid
 from io import BytesIO
-from typing import Any, Optional, cast
+from typing import Any, Iterable, Optional, cast
 
 from fastapi import UploadFile
 from google import genai
@@ -25,7 +27,13 @@ from PIL import Image
 
 from app.utils.agent_tool import get_predefined_styles
 from app.utils.config import get_banana_session_service, settings
-from app.utils.models import ImageCategory, ImageMimeType, ImageRequest, ImageStatus
+from app.utils.models import (
+    ImageAspectRatio,
+    ImageCategory,
+    ImageMimeType,
+    ImageRequest,
+    ImageStatus,
+)
 
 SYSTEM_AGENT_AUTHOR = "triage_agent"
 
@@ -207,6 +215,8 @@ def resolve_prompt_and_category(
 async def generate_image_bytes(
     file_payloads: list[tuple[bytes, str]],
     refined_prompt: str,
+    *,
+    aspect_ratio: ImageAspectRatio | str | None = None,
     output_format: ImageMimeType = ImageMimeType.PNG,
 ) -> bytes:
     # Generate image bytes from the refined prompt and uploaded files
@@ -219,27 +229,33 @@ async def generate_image_bytes(
         for data, mime in file_payloads
     ] + [Part.from_text(text=refined_prompt)]
 
-    config = GenerateContentConfig(
-        response_modalities=["IMAGE"],
-        safety_settings=[
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            ),
-            SafetySetting(
-                category=HarmCategory.HARM_CATEGORY_HARASSMENT,
-                threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
-            ),
-        ],
-    )
+    safety_settings = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold=HarmBlockThreshold.BLOCK_ONLY_HIGH,
+        ),
+    ]
+
+    image_config = None
+    if aspect_ratio:
+        ratio_value = (
+            aspect_ratio.value
+            if isinstance(aspect_ratio, ImageAspectRatio)
+            else str(aspect_ratio)
+        )
+        image_config = types.ImageConfig(aspect_ratio=ratio_value)
 
     # Run generation
     loop = asyncio.get_event_loop()
@@ -248,16 +264,69 @@ async def generate_image_bytes(
         lambda: client.models.generate_content(
             model=settings.FLASH_IMAGE,
             contents=contents,
-            config=config,
+            config=GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                safety_settings=safety_settings,
+                image_config=image_config,
+            ),
         )
     )
 
-    # Extract the first inline image bytes
-    for candidate in response.candidates:
-        for part in candidate.content.parts:
+    def _render_image_part(part: Part) -> bytes | None:
+        if not hasattr(part, "as_image"):
+            return None
+
+        image = part.as_image()
+        if image is None:
+            return None
+
+        buffer = BytesIO()
+        format_hint = output_format.value.split("/")[-1].upper()
+        try:
+            image.save(buffer, format=format_hint)
+        except ValueError:
+            # Fallback to PNG if the hint is unsupported for this image
+            image.save(buffer, format="PNG")
+        image.close()
+        return buffer.getvalue()
+
+    def _extract_from_parts(parts: Iterable[Part]) -> bytes | None:
+        for part in parts:
             inline = getattr(part, "inline_data", None)
-            if inline and getattr(inline, "data", None):
-                return inline.data
+            if inline is not None:
+                rendered = _render_image_part(part)
+                if rendered is not None:
+                    return rendered
+
+            if inline is not None:
+                data = getattr(inline, "data", None)
+                if data:
+                    if isinstance(data, str):
+                        try:
+                            return base64.b64decode(data)
+                        except (ValueError, binascii.Error):  # pragma: no cover - defensive fallback
+                            logger.warning("Failed to decode base64 inline image data")
+                            continue
+                    return data
+
+            rendered = _render_image_part(part)
+            if rendered is not None:
+                return rendered
+        return None
+
+    top_level_parts = getattr(response, "parts", None)
+    if top_level_parts:
+        maybe_bytes = _extract_from_parts(top_level_parts)
+        if maybe_bytes:
+            return maybe_bytes
+
+    # Extract the first inline image bytes (or image object) from candidates
+    for candidate in getattr(response, "candidates", []) or []:
+        candidate_content = getattr(candidate, "content", None)
+        if candidate_content and getattr(candidate_content, "parts", None):
+            maybe_bytes = _extract_from_parts(candidate_content.parts)
+            if maybe_bytes:
+                return maybe_bytes
 
     raise ValueError("Image generation response did not include inline image data")
 
