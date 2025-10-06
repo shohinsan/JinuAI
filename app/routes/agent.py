@@ -1,38 +1,30 @@
-import asyncio
-import base64
-import os
-from typing import List, Optional
-import uuid
-from fastapi import APIRouter, File, Form, UploadFile
-from app.utils.agent_helpers import (
-    ensure_session_exists,
-    fetch_refined_prompt,
-    finish_session_turn,
-    append_session_event,
-    generate_image_bytes,
-    prepare_upload_payloads,
-    resolve_prompt_and_category,
-    run_root_agent,
-    start_session_turn,
-    SYSTEM_AGENT_AUTHOR,
+
+from io import BytesIO
+from typing import Annotated, List, Optional
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
+from starlette.datastructures import Headers
+
+from app.services.agent.agent_service import AgentService
+from app.utils.delegate import (
+    AgentRepositoryDep,
+    AgentServiceDep,
+    CurrentUser,
 )
-from app.utils.delegate import CurrentUser
 from app.utils.models import (
     ImageCategory,
     ImageMimeType,
     ImageRequest,
     ImageResponse,
-    ImageSize,
-    ImageStatus,
 )
-
 router = APIRouter()
 
+
 @router.post("/prompt", response_model=ImageResponse)
-async def preview_refined_prompt(
+async def generate_image(
     prompt: Optional[str] = Form(None),
-    files: List[UploadFile] = File(...),
-    size: Optional[str] = Form(None),
+    files: Optional[List[UploadFile]] = File(None),
+    model_asset_ids: Optional[str] = Form(None),
     style: Optional[str] = Form(None),
     aspect_ratio: Optional[str] = Form(None),
     output_format: Optional[ImageMimeType] = Form(ImageMimeType.PNG),
@@ -40,11 +32,41 @@ async def preview_refined_prompt(
     category: Optional[ImageCategory] = Form(None),
     *,
     current_user: CurrentUser,
+    agent_service: AgentServiceDep,
 ):
+    """Generate an image using AI agents based on user prompt and uploaded files."""
+    aggregated_files: list[UploadFile] = []
+
+    # Load model assets if specified
+    if model_asset_ids:
+        model_blobs = await agent_service.load_model_assets(
+            model_asset_ids=model_asset_ids,
+            user_id=current_user.id,
+        )
+        for idx, (blob, content_type) in enumerate(model_blobs):
+            aggregated_files.append(
+                UploadFile(
+                    filename=f"model_{idx}.bin",
+                    file=BytesIO(blob),
+                    headers=Headers({"content-type": content_type}),
+                )
+            )
+
+    if files:
+        aggregated_files.extend(files)
+
+    if not aggregated_files:
+        raise HTTPException(status_code=400, detail="At least one image file is required")
+
+    if len(aggregated_files) > 3:
+        raise HTTPException(
+            status_code=400,
+            detail="You can provide at most three images across uploaded files and model_asset_ids",
+        )
+
     request = ImageRequest(
         prompt=prompt,
-        files=list(files),
-        size=size,
+        files=aggregated_files,
         style=style,
         aspect_ratio=aspect_ratio,
         output_format=output_format,
@@ -52,139 +74,163 @@ async def preview_refined_prompt(
         category=category,
     )
 
-    user_id = str(current_user.id)
+    return await agent_service.generate_image(
+        request=request,
+        user_id=current_user.id,
+    )
 
-    session_id = session_id or str(uuid.uuid4())
 
-    session = await ensure_session_exists(user_id, session_id)
-    session_id = session.id
+@router.post("/media")
+async def upload_media(
+    files: List[UploadFile] = File(...),
+    collection: Optional[str] = Form("media"),
+    style_subcategory: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None),
+    *,
+    current_user: CurrentUser,
+    agent_service: AgentServiceDep,
+):
+    """Upload media files to MinIO and track in database."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
 
-    file_payloads = await prepare_upload_payloads(request.files)
-    resolved_prompt, category, normalized_style = resolve_prompt_and_category(request)
+    collection = (collection or "media").strip().lower()
+    if collection not in {"media", "models", "style"}:
+        raise HTTPException(status_code=400, detail="Invalid collection")
 
-    size = request.size or ImageSize.MEDIUM
-    output_format = request.output_format or ImageMimeType.PNG
-
-    title_source = request.prompt or resolved_prompt
-    session_title = (title_source or "Image request")[:200]
-
-    session = await start_session_turn(session, title=session_title)
-
-    user_event_metadata = {
-        "category": category.value if category else None,
-        "size": size.value if isinstance(size, ImageSize) else str(size),
-        "style": normalized_style,
-        "aspect_ratio": request.aspect_ratio.value if request.aspect_ratio else None,
+    upload_handlers = {
+        "media": agent_service.upload_and_track_media,
+        "models": agent_service.upload_and_track_model,
+        "style": agent_service.upload_and_track_style,
     }
-    user_event_metadata = {
-        key: value
-        for key, value in user_event_metadata.items()
-        if value is not None
+
+    uploaded_assets = []
+    for file in files:
+        content = await file.read()
+        filename = AgentService.generate_storage_filename(
+            file.filename or "unknown",
+            file.content_type or "application/octet-stream"
+        )
+
+        asset = await upload_handlers[collection](
+            user_id=current_user.id,
+            filename=filename,
+            data=content,
+            content_type=file.content_type or "application/octet-stream",
+        )
+        
+        uploaded_assets.append({
+            "id": str(asset.id),
+            "created_at": asset.created_at.isoformat(),
+        })
+
+    return {
+        "success": True,
+        "uploaded": len(uploaded_assets),
+        "assets": uploaded_assets,
     }
 
-    text_for_agent = "\n\n".join(
-        filter(
-            None,
-            [
-                *(
-                    f"ImageCategory: {category.value}" if category else [],
-                    f"ImageSize: {size.value}" if size else [],
-                    f"AspectRatio: {request.aspect_ratio.value}" if request.aspect_ratio else [],
-                    f"Style: {normalized_style}" if normalized_style else [],
-                ),
-                resolved_prompt.strip() if resolved_prompt else None,
-            ],
-        )
+
+@router.get("/media")
+async def list_user_media(
+    *,
+    current_user: CurrentUser,
+    agent_service: AgentServiceDep,
+    collection: str = Query("all"),
+    style_subcategory: Optional[str] = Query(None),
+    skip: int = 0,
+    limit: int = 50,
+):
+    """List uploaded assets for the current user by collection."""
+    collection = (collection or "all").strip().lower()
+    
+    list_handlers = {
+        "all": lambda: agent_service.get_user_assets(current_user.id, skip, limit),
+        "media": lambda: agent_service.get_user_media(current_user.id, skip, limit),
+        "models": lambda: agent_service.get_model_assets(current_user.id, skip, limit),
+        "style": lambda: agent_service.get_style_assets(style_subcategory, skip, limit),
+    }
+
+    if collection not in list_handlers:
+        raise HTTPException(status_code=400, detail="Invalid collection")
+
+    assets = list_handlers[collection]()
+    return {
+        "total": len(assets),
+        "assets": [
+            {
+                "id": str(asset.id),
+                "created_at": asset.created_at.isoformat(),
+            }
+            for asset in assets
+        ],
+    }
+
+
+@router.get("/media/{asset_id}")
+async def get_media_asset(
+    asset_id: str,
+    *,
+    current_user: CurrentUser,
+    agent_service: AgentServiceDep,
+):
+    """Get a specific media asset by ID."""
+    asset = agent_service.resolve_asset_by_identifier(asset_id, current_user.id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return {
+        "id": str(asset.id),
+        "asset_type": asset.asset_type,
+        "session_id": asset.session_id,
+        "prompt": asset.prompt,
+        "created_at": asset.created_at.isoformat(),
+    }
+
+
+@router.get("/media/{asset_id}/download", name="download_media_asset")
+async def download_media_asset(
+    asset_id: str,
+    *,
+    current_user: CurrentUser,
+    agent_service: AgentServiceDep,
+):
+    """Stream the binary contents of a stored asset by its identifier."""
+    asset = agent_service.resolve_asset_by_identifier(asset_id, current_user.id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    data = await agent_service.fetch_asset_bytes(asset)
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={asset.id}.bin"},
     )
 
-    session = await append_session_event(
-        session,
-        author="user",
-        text=text_for_agent,
-        custom_metadata=user_event_metadata or None,
-    )
 
-    try:
-        await run_root_agent(user_id, session_id, text_for_agent)
+@router.get("/prompt/search")
+async def search_prompts(
+    q: str,
+    *,
+    current_user: CurrentUser,
+    agent_repository: AgentRepositoryDep,
+    limit: int = 20,
+):
+    """Search through user's prompts and generated images."""
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
 
-        refined_prompt = (
-            await fetch_refined_prompt(user_id, session_id, resolved_prompt)
-        ).strip()
+    assets = agent_repository.search_assets_by_prompt(current_user.id, q, limit)
+    return {
+        "query": q,
+        "total": len(assets),
+        "results": [
+            {
+                "id": str(asset.id),
+                "prompt": asset.prompt,
+                "created_at": asset.created_at.isoformat(),
+            }
+            for asset in assets
+        ],
+    }
 
-        final_bytes = await generate_image_bytes(
-            file_payloads=file_payloads,
-            refined_prompt=refined_prompt,
-            output_format=output_format,
-        )
-    except asyncio.CancelledError:
-        session = await finish_session_turn(
-            session,
-            status=ImageStatus.FAILED,
-            title=session_title,
-            interrupted=True,
-        )
-        await append_session_event(
-            session,
-            author=SYSTEM_AGENT_AUTHOR,
-            text="Image generation cancelled by user",
-            custom_metadata={
-                "status": ImageStatus.FAILED.value,
-                "reason": "cancelled_by_user",
-            },
-            turn_complete=True,
-            interrupted=True,
-        )
-        raise
-    except Exception as exc:
-        session = await finish_session_turn(
-            session,
-            status=ImageStatus.FAILED,
-            title=session_title,
-        )
-        await append_session_event(
-            session,
-            author=SYSTEM_AGENT_AUTHOR,
-            text=f"Image generation failed: {exc}",
-            custom_metadata={"status": ImageStatus.FAILED.value},
-            turn_complete=True,
-        )
-        raise
-    else:
-        session = await finish_session_turn(
-            session,
-            status=ImageStatus.COMPLETED,
-            title=session_title,
-        )
-
-    # Save the generated image to the generated-img folder
-    out_dir = os.path.join(os.getcwd(), "generated-img")
-    os.makedirs(out_dir, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}.{output_format.name.lower()}"
-    out_path = os.path.join(out_dir, filename)
-    with open(out_path, "wb") as f:
-        f.write(final_bytes)
-
-    session = await append_session_event(
-        session,
-        author=SYSTEM_AGENT_AUTHOR,
-        text="Image generation completed",
-        custom_metadata={
-            "status": ImageStatus.COMPLETED.value,
-            "output_path": filename,
-        },
-        turn_complete=True,
-    )
-
-    encoded_image = f"data:{output_format.value};base64,{base64.b64encode(final_bytes).decode()}"
-
-    return ImageResponse(
-        status=ImageStatus.COMPLETED if refined_prompt else ImageStatus.PENDING,
-        refined_prompt=refined_prompt,
-        size=size.value if isinstance(size, ImageSize) else str(size),
-        style=request.style,
-        aspect_ratio=request.aspect_ratio.value if request.aspect_ratio else None,
-        session_id=session.id,
-        category=category.value if category else None,
-        user_id=user_id,
-        output_file=encoded_image,
-    )

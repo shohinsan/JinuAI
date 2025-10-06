@@ -8,12 +8,14 @@ from typing import Any, Optional, cast
 
 from fastapi import UploadFile
 from google import genai
-from google.genai import types
 from google.genai.errors import APIError
 from google.genai.types import (
+    Blob,
     GenerateContentConfig,
     HarmBlockThreshold,
+    ImageConfig,
     HarmCategory,
+    Content,
     Part,
     SafetySetting,
 )
@@ -25,7 +27,7 @@ from PIL import Image
 
 from app.utils.agent_tool import get_predefined_styles
 from app.utils.config import get_banana_session_service, settings
-from app.utils.models import ImageCategory, ImageMimeType, ImageRequest, ImageStatus
+from app.utils.models import ImageAspectRatio, ImageCategory, ImageMimeType, ImageRequest, ImageStatus
 
 SYSTEM_AGENT_AUTHOR = "triage_agent"
 
@@ -81,9 +83,9 @@ async def append_session_event(
     content = None
     if text:
         role = "user" if author == "user" else "model"
-        content = types.Content(
+        content = Content(
             role=role,
-            parts=[types.Part.from_text(text=text)],
+            parts=[Part.from_text(text=text)],
         )
 
     event = Event(
@@ -177,50 +179,97 @@ async def finish_session_turn(
 
 
 async def prepare_upload_payloads(files: list[UploadFile]) -> list[tuple[bytes, str]]:
-    # Read and validate uploaded files
-
+    """Convert uploaded files into (bytes, mime_type) tuples for processing.
+    
+    Args:
+        files: List of uploaded file objects
+        
+    Returns:
+        List of (image_bytes, mime_type) tuples
+    """
     payloads = []
-    for i, upload in enumerate(files, 1):
-        data = await upload.read()
-        await upload.seek(0)
+    
+    for upload_file in files:
+        # Read file data
+        file_bytes = await upload_file.read()
+        await upload_file.seek(0)  # Reset file pointer
 
-        with Image.open(BytesIO(data)) as img:
-            img_format = img.format
+        # Detect image format using PIL
+        with Image.open(BytesIO(file_bytes)) as img:
+            image_format = img.format
 
-        mime = Image.MIME.get(img_format, upload.content_type or ImageMimeType.PNG.value)
-        payloads.append((data, mime))
+        # Get MIME type from PIL's mapping or fall back to content_type
+        mime_type = Image.MIME.get(
+            image_format, 
+            upload_file.content_type or ImageMimeType.PNG.value
+        )
+        
+        payloads.append((file_bytes, mime_type))
 
     return payloads
 
 
-def resolve_prompt_and_category(
+def get_input_prompt_and_category(
     request: ImageRequest,
 ) -> tuple[str, Optional[ImageCategory], Optional[str]]:
-    # Use either the user-provided prompt or the style prompt (one or the other)
-
-    resolved_prompt, resolved_category = (
-        request.prompt or get_predefined_styles(request.style)[0],
-        request.category
-    )
-    return resolved_prompt, resolved_category, None
+    """Get the input prompt and category from the request.
+    
+    For template category: uses style-based template prompt (user prompt is ignored).
+    For other categories: uses user-provided prompt, or falls back to style prompt.
+    
+    Args:
+        request: The image generation request
+        
+    Returns:
+        Tuple of (input_prompt, category, normalized_style)
+    """
+    category = request.category
+    
+    # Templates always use predefined style prompt; others use user prompt with style fallback
+    should_use_template = category == ImageCategory.TEMPLATE
+    user_prompt = None if should_use_template else request.prompt
+    
+    input_prompt = user_prompt or (get_predefined_styles(request.style) or [""])[0]
+    normalized_style = None  # Style normalization not currently used
+    
+    return input_prompt, category, normalized_style
 
 async def generate_image_bytes(
     file_payloads: list[tuple[bytes, str]],
-    refined_prompt: str,
+    prompt: str,
+    aspect_ratio: Optional[ImageAspectRatio] = None,
     output_format: ImageMimeType = ImageMimeType.PNG,
 ) -> bytes:
-    # Generate image bytes from the refined prompt and uploaded files
-
+    """Generate image bytes from the prompt and uploaded files.
+    
+    Args:
+        file_payloads: List of (bytes, mime_type) tuples for input images
+        prompt: The text prompt for generation
+        aspect_ratio: Optional aspect ratio for the generated image
+        output_format: Output image format (PNG or JPEG)
+    
+    Returns:
+        bytes: The generated image data
+    """
     client = cast(genai.Client, settings.google_genai_client)
 
-    # Prepare contents: files + prompt
-    contents = [
-        Part.from_bytes(data=data, mime_type=mime or output_format.value)
-        for data, mime in file_payloads
-    ] + [Part.from_text(text=refined_prompt)]
+    # Prepare contents: convert bytes to images using as_image(), then add prompt
+    image_parts = []
+    for data, mime in file_payloads:
+        # Create Part from bytes using inline data (no file URI required)
+        part = Part.from_bytes(data=data, mime_type=mime or output_format.value)
+        image_parts.append(part)
+    
+    contents = image_parts + [Part.from_text(text=prompt)]
 
+    # Build config with optional aspect ratio
+    image_config = None
+    if aspect_ratio:
+        image_config = ImageConfig(aspect_ratio=aspect_ratio.value)
+    
     config = GenerateContentConfig(
         response_modalities=["IMAGE"],
+        image_config=image_config,
         safety_settings=[
             SafetySetting(
                 category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
@@ -252,12 +301,12 @@ async def generate_image_bytes(
         )
     )
 
-    # Extract the first inline image bytes
-    for candidate in response.candidates:
-        for part in candidate.content.parts:
-            inline = getattr(part, "inline_data", None)
-            if inline and getattr(inline, "data", None):
-                return inline.data
+    # Extract image data from response (following Google's official pattern)
+    for part in response.parts:
+        if part.inline_data is not None:
+            inline_data: Blob = part.inline_data
+            image = inline_data.as_image()
+            return image.image_bytes
 
     raise ValueError("Image generation response did not include inline image data")
 
@@ -276,9 +325,14 @@ async def fetch_refined_prompt(
     )
 
     if final_session and final_session.state:
-        refined = (final_session.state.get("refined_prompt") or "").strip()
-        if refined:
-            return refined
+        # Try new key first, then fall back to legacy key for backwards compatibility
+        final_prompt = (
+            final_session.state.get("final_prompt") 
+            or final_session.state.get("refined_prompt") 
+            or ""
+        ).strip()
+        if final_prompt:
+            return final_prompt
 
     return fallback_prompt
 
@@ -288,14 +342,24 @@ async def run_root_agent(
     session_id: str,
     text_for_agent: str,
 ) -> Optional[str]:
+    """Run the root agent with the given text and extract the refined prompt.
+    
+    Args:
+        user_id: The user identifier
+        session_id: The session identifier
+        text_for_agent: The text input for the agent
+        
+    Returns:
+        The refined prompt text if available, None otherwise
+    """
     from app.utils.agent_orchestration import runner_image
 
-    content = types.Content(
+    content = Content(
         role="user",
-        parts=[types.Part.from_text(text=text_for_agent)],
+        parts=[Part.from_text(text=text_for_agent)],
     )
 
-    final_text: Optional[str] = None
+    refined_text: Optional[str] = None
 
     try:
         async for event in runner_image.run_async(
@@ -303,24 +367,32 @@ async def run_root_agent(
             session_id=session_id,
             new_message=content,
         ):
+            # Check for errors
             if event.error_message:
                 raise RuntimeError(event.error_message)
 
+            # Extract text from event content parts
             event_content = getattr(event, "content", None)
-            if event_content and getattr(event_content, "parts", None):
-                text_segments = [
-                    getattr(part, "text", "")
-                    for part in event_content.parts
-                    if getattr(part, "text", None)
-                ]
-                joined = "\n".join(segment.strip() for segment in text_segments if segment)
-                if joined:
-                    final_text = joined
+            if event_content:
+                parts = getattr(event_content, "parts", None)
+                if parts:
+                    # Collect all text segments from parts
+                    text_segments = [
+                        part.text
+                        for part in parts
+                        if getattr(part, "text", None)
+                    ]
+                    # Join non-empty segments
+                    joined_text = "\n".join(segment.strip() for segment in text_segments if segment)
+                    if joined_text:
+                        refined_text = joined_text
 
+            # Stop when we get the final response
             if event.is_final_response():
                 break
+
     except APIError as exc:
         logger.warning("Gemini agent run failed: %s", exc)
         return None
 
-    return final_text
+    return refined_text

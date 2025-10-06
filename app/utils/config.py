@@ -7,9 +7,11 @@ leveraging Pydantic for type safety and environment variable support.
 
 import secrets
 import warnings
-from typing import Annotated, Any, Literal, Self, ClassVar
+from typing import Annotated, Any, ClassVar, Literal, Self
+
 from google import genai
 from google.adk.sessions import DatabaseSessionService
+from minio import Minio
 
 from pydantic import (
     AnyUrl,
@@ -153,6 +155,44 @@ class Settings(BaseSettings):
     
     GOOGLE_BANANA_MODEL_SESSION: ClassVar[DatabaseSessionService | None] = None
 
+    # MinIO Configuration
+    MINIO_ENDPOINT: str | None = None
+    MINIO_ACCESS_KEY: str | None = None
+    MINIO_SECRET_KEY: str | None = None
+    MINIO_BUCKET_NAME: str = "jinuai-assets"
+    MINIO_SECURE: bool = False  # Set to True for HTTPS
+    MINIO_PREFIX_MEDIA: str = "media"
+    MINIO_PREFIX_MODELS: str = "models"
+    MINIO_PREFIX_STYLES: str = "styles"
+
+    _minio_client: ClassVar[Minio | None] = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_enabled(self) -> bool:
+        """Check if MinIO is properly configured."""
+        return bool(
+            self.MINIO_ENDPOINT 
+            and self.MINIO_ACCESS_KEY 
+            and self.MINIO_SECRET_KEY
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def minio_client(self) -> Minio | None:
+        """Get or create MinIO client instance."""
+        if not self.minio_enabled:
+            return None
+        
+        if Settings._minio_client is None:
+            Settings._minio_client = Minio(
+                endpoint=self.MINIO_ENDPOINT,
+                access_key=self.MINIO_ACCESS_KEY,
+                secret_key=self.MINIO_SECRET_KEY,
+                secure=self.MINIO_SECURE,
+            )
+        return Settings._minio_client
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def google_genai_client(self) -> genai.Client | None:
@@ -170,7 +210,7 @@ class Settings(BaseSettings):
 
     # Model constants (not Pydantic fields)
     FLASH_TEXT: ClassVar[str] = "gemini-2.5-flash"
-    FLASH_IMAGE: ClassVar[str] = "gemini-2.5-flash-image-preview"
+    FLASH_IMAGE: ClassVar[str] = "gemini-2.5-flash-image"
 
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:

@@ -23,6 +23,7 @@ STYLE_PRESETS_RAW: dict[str, str] = {
     "burning": "A close-up, cinematic portrait of [uploaded person photo] sitting at the open door of a classic car at night. The scene is filled with blazing orange light, glowing embers, and swirling sparks surrounding the car, as if the air itself is alive with heat and energy. The brilliant glow reflects on the person’s face, highlighting a fearless, intense expression with sharp shadows. The shot is closer, emphasizing the dramatic aura, radiant atmosphere, and fiery background that engulfs the scene. Hyper-detailed, photorealistic, gritty, and cinematic style with vivid contrast and glowing intensity.",
     "ads": "Transform the uploaded {juice bottle} into a {cinematic commercial advertisement} where the entire bottle is visually constructed from fresh {fruit type}. Each {grape/fruit} piece should form the shape of the bottle, with natural stems and leaves integrated seamlessly. Add {morning sunlight} and a {vineyard/orchard background} for realism. Highlight {freshness}, {juiciness}, and {natural quality}. The {label of the original bottle} should remain clearly visible on the fruit-formed surface. Style: {photorealistic}, {high detail}, {premium advertising look}. Ratio: {3:4 or 4:5} — ultra-HD quality.{fruit type} = grapes, oranges, pomegranates, strawberries, etc.",
     "gta": "Create a GTA-style poster artwork featuring the [uploaded person or theme]. Use the signature Rockstar Games poster design: bold cell-shaded illustration, thick outlines, saturated colors, and cinematic framing. Split the poster into multiple dynamic panels, each showing a different scene or action shot of the subject — such as driving, posing, or holding props relevant to the character/theme. Include urban backdrops, neon lights, and dramatic perspectives to capture the gritty yet stylish GTA aesthetic. The overall composition should feel like an official Grand Theft Auto promotional poster, striking and iconic.",
+    "reflection": "In a dimly lit bathroom, the person from the first picture stands on the left side, seen from behind as they face a mirror above a white sink with a silver faucet, the faint outline of a glass shower visible in the background. Shadows and soft light envelop the real side of the room, creating a subdued, almost eerie stillness, yet in the mirror’s reflection emerges the armored warrior from the second picture, unchanged in design and radiant in a focused glow. This contrast between darkness and light bridges the ordinary and the extraordinary, infusing the scene with a mysterious, suspenseful tension as the two worlds seem to meet within the mirror’s surface."
 }
 
 STYLE_PRESETS: dict[str, Tuple[str, ImageCategory]] = {
@@ -88,12 +89,23 @@ def get_predefined_styles(
     return None, None, None
 
 
-style_function_tool = FunctionTool(func=get_predefined_styles)
+def resolve_styles_for_tool(
+    style_value: Optional[str] = None,
+) -> dict[str, Optional[str]]:
+    prompt, category, normalized_key = get_predefined_styles(style_value)
+    return {
+        "prompt": prompt,
+        "category": category.value if isinstance(category, ImageCategory) else category,
+        "normalized_style": normalized_key,
+    }
+
+
+style_function_tool = FunctionTool(func=resolve_styles_for_tool)
 style_function_tool.custom_metadata = {
     "tool": Tool(
         function_declarations=[
             FunctionDeclaration(
-                name="get_predefined_styles",
+                name="resolve_styles_for_tool",
                 description="Resolve style prompt metadata from a provided style value.",
                 parameters=Schema(
                     type=Type.OBJECT,

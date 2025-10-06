@@ -65,6 +65,6 @@ def prompt_input_guardrail(
     return LlmResponse(
         content=Content(
             role="model",
-            parts=[Part(text=BLOCKED_PROMPT_RESPONSE)],
+            parts=[Part.from_text(text=BLOCKED_PROMPT_RESPONSE)],
         )
     )
