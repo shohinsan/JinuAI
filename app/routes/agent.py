@@ -1,6 +1,6 @@
 
 from io import BytesIO
-from typing import Annotated, List, Optional
+from typing import List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from starlette.datastructures import Headers
@@ -13,7 +13,6 @@ from app.utils.delegate import (
 )
 from app.utils.models import (
     ImageCategory,
-    ImageMimeType,
     ImageRequest,
     ImageResponse,
 )
@@ -24,10 +23,8 @@ router = APIRouter()
 async def generate_image(
     prompt: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
-    model_asset_ids: Optional[str] = Form(None),
     style: Optional[str] = Form(None),
     aspect_ratio: Optional[str] = Form(None),
-    output_format: Optional[ImageMimeType] = Form(ImageMimeType.PNG),
     session_id: Optional[str] = Form(None),
     category: Optional[ImageCategory] = Form(None),
     *,
@@ -35,41 +32,40 @@ async def generate_image(
     agent_service: AgentServiceDep,
 ):
     """Generate an image using AI agents based on user prompt and uploaded files."""
-    aggregated_files: list[UploadFile] = []
+    asset_ids = [
+        (await f.read()).decode().strip()
+        for f in files or []
+        if f.content_type and f.content_type.startswith("text/")
+    ]
+    
+    image_files = [
+        f for f in files or []
+        if not (f.content_type and f.content_type.startswith("text/"))
+    ]
 
-    # Load model assets if specified
-    if model_asset_ids:
-        model_blobs = await agent_service.load_model_assets(
-            model_asset_ids=model_asset_ids,
-            user_id=current_user.id,
+    if asset_ids:
+        blobs = await agent_service.load_model_assets(
+            model_asset_ids=",".join(asset_ids), user_id=current_user.id
         )
-        for idx, (blob, content_type) in enumerate(model_blobs):
-            aggregated_files.append(
-                UploadFile(
-                    filename=f"model_{idx}.bin",
-                    file=BytesIO(blob),
-                    headers=Headers({"content-type": content_type}),
-                )
+        image_files.extend(
+            UploadFile(
+                filename=f"model_{i}.bin",
+                file=BytesIO(blob),
+                headers=Headers({"content-type": mime}),
             )
-
-    if files:
-        aggregated_files.extend(files)
-
-    if not aggregated_files:
-        raise HTTPException(status_code=400, detail="At least one image file is required")
-
-    if len(aggregated_files) > 3:
-        raise HTTPException(
-            status_code=400,
-            detail="You can provide at most three images across uploaded files and model_asset_ids",
+            for i, (blob, mime) in enumerate(blobs)
         )
+
+    if not image_files:
+        raise HTTPException(status_code=400, detail="At least one image file is required")
+    if len(image_files) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 images allowed")
 
     request = ImageRequest(
         prompt=prompt,
-        files=aggregated_files,
+        files=image_files,
         style=style,
         aspect_ratio=aspect_ratio,
-        output_format=output_format,
         session_id=session_id,
         category=category,
     )

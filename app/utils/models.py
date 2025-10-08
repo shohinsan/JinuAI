@@ -53,7 +53,22 @@ class ImageStatus(str, Enum):
 class ImageStyle(str, Enum):
     """Predefined style presets"""
     POLAROID = "polaroid"
-    STUDIO = "studio"
+    FIGURE = "figure"
+    FOODIE = "foodie"
+    EXPLOSIVE = "explosive"
+    CARD = "card"
+    BUBBLEHEAD = "bubblehead"
+    KEYCHAIN = "keychain"
+    CYBERPANK = "cyberpank"
+    GAMING = "gaming"
+    AGING = "aging"
+    BENCH = "bench"
+    RESTORE = "restore"
+    ISOMETRIC = "isometric"
+    BURNING = "burning"
+    ADS = "ads"
+    GTA = "gta"
+    REFLECTION = "reflection"
 
 
 class ImageCategory(str, Enum):
@@ -330,7 +345,6 @@ class ImageRequest(BaseModel):
     files: List[UploadFile] = Field(..., description="1–3 input image files (png/jpg)")
     style: Optional[str] = Field(default=None, description="Optional style preset key (matches ImageStyle values)")
     aspect_ratio: Optional[ImageAspectRatio] = Field(default=None, description="Aspect ratio of the generated images. Supported values are '1:1', '3:4', '4:3', '9:16', and '16:9'")
-    output_format: Optional[ImageMimeType] = Field(default=ImageMimeType.PNG, description="Output image format")
     session_id: Optional[str] = Field(default=None, description="Session identifier to persist state")
     category: Optional[ImageCategory] = Field(None, description="Routing category: 'creativity', 'template', 'fit', or 'lightbox'")
 
@@ -403,10 +417,8 @@ def normalize_style(cls, value: Any) -> Any:
 
     str_value = str(value).strip().lower()
    
-    alias_map = {
-        "polaroid": ImageStyle.POLAROID,
-        "ghibli": ImageStyle.GHIBLI,
-    }
+    # Map common aliases to ImageStyle enum values
+    alias_map = {style.value: style for style in ImageStyle}
 
     if str_value in alias_map:
         return alias_map[str_value]

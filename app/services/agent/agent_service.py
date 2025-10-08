@@ -11,7 +11,7 @@ from app.utils.agent_helpers import (
     SYSTEM_AGENT_AUTHOR,
     append_session_event,
     ensure_session_exists,
-    fetch_refined_prompt,
+    fetch_prompt,
     finish_session_turn,
     generate_image_bytes,
     get_input_prompt_and_category,
@@ -20,7 +20,7 @@ from app.utils.agent_helpers import (
     start_session_turn,
 )
 from app.utils.config import settings
-from app.utils.minio_storage import (
+from app.utils.storage import (
     fetch_object_by_path,
     upload_model_asset,
     upload_style_asset,
@@ -375,7 +375,7 @@ class AgentService:
             request
         )
 
-        output_format = request.output_format or ImageMimeType.PNG
+        output_format = ImageMimeType.PNG
         aspect_ratio = request.aspect_ratio
 
         # Create session title
@@ -418,18 +418,18 @@ class AgentService:
 
         try:
             # Templates use the prompt as-is; other categories go through agent refinement
-            final_prompt = input_prompt.strip()
+            prompt = input_prompt.strip()
             
             if category != ImageCategory.TEMPLATE:
                 await run_root_agent(str(user_id), session_id, text_for_agent)
-                final_prompt = (
-                    await fetch_refined_prompt(str(user_id), session_id, input_prompt)
+                prompt = (
+                    await fetch_prompt(str(user_id), session_id, input_prompt)
                 ).strip()
 
             # Generate image
             final_bytes = await generate_image_bytes(
                 file_payloads=file_payloads,
-                prompt=final_prompt,
+                prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 output_format=output_format,
             )
@@ -491,7 +491,7 @@ class AgentService:
             data=final_bytes,
             content_type=output_format.value,
             session_id=session_id,
-            prompt=final_prompt,
+            prompt=prompt,
         )
 
         # Log completion event
@@ -512,8 +512,8 @@ class AgentService:
         encoded_image = f"data:{output_format.value};base64,{base64.b64encode(final_bytes).decode()}"
 
         return ImageResponse(
-            status=ImageStatus.COMPLETED if final_prompt else ImageStatus.PENDING,
-            prompt=final_prompt,
+            status=ImageStatus.COMPLETED if prompt else ImageStatus.PENDING,
+            prompt=prompt,
             style=request.style,
             aspect_ratio=request.aspect_ratio.value if request.aspect_ratio else None,
             session_id=session.id,

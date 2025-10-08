@@ -311,7 +311,7 @@ async def generate_image_bytes(
     raise ValueError("Image generation response did not include inline image data")
 
 
-async def fetch_refined_prompt(
+async def fetch_prompt(
     user_id: str,
     session_id: str,
     fallback_prompt: str,
@@ -325,14 +325,9 @@ async def fetch_refined_prompt(
     )
 
     if final_session and final_session.state:
-        # Try new key first, then fall back to legacy key for backwards compatibility
-        final_prompt = (
-            final_session.state.get("final_prompt") 
-            or final_session.state.get("refined_prompt") 
-            or ""
-        ).strip()
-        if final_prompt:
-            return final_prompt
+        prompt = final_session.state.get("prompt", "").strip()
+        if prompt:
+            return prompt
 
     return fallback_prompt
 

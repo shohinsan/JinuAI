@@ -37,8 +37,6 @@ creativity_agent = Agent(
     Output only the refined image generation prompt as plain text under 200 words.
     </output_description>
     """).strip(),
-    tools=[],
-    output_key="final_prompt",
 )
 
 
@@ -72,7 +70,6 @@ template_agent = Agent(
     - No conversational text, only the prompt
     """).strip(),
     tools=[style_function_tool],
-    output_key="final_prompt",
 )
 
 
@@ -105,8 +102,6 @@ lightbox_agent = Agent(
     A concise, photorealistic product image generation prompt referencing both input images.
     </output_description>
     """).strip(),
-    tools=[],
-    output_key="final_prompt",
 )
 
 
@@ -141,8 +136,6 @@ fit_agent = Agent(
     A refined, non-conversational prompt describing the final combined image.
     </output_description>
     """).strip(),
-    tools=[],
-    output_key="final_prompt",
 )
 
 
@@ -169,7 +162,7 @@ triage_agent = Agent(
     3. When delegating to template_agent:
         - Pass the "Style:" value from the input to the template agent
         - The template agent will retrieve the predefined prompt
-        - Return the template agent's output as your final_prompt
+        - Return the template agent's output as your prompt
     
     4. Never process the request yourself—always delegate to exactly ONE sub-agent.
     </instructions>
@@ -192,10 +185,9 @@ triage_agent = Agent(
     Never output meta or reasoning text.
     </meta>
     """).strip(),
-    tools=[],
     sub_agents=[fit_agent, lightbox_agent, template_agent, creativity_agent],
     before_model_callback=prompt_input_guardrail,
-    output_key="final_prompt",
+    output_key="prompt",
 )
 
 

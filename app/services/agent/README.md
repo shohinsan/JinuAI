@@ -178,11 +178,10 @@ Generate an image using AI agents.
 
 **Request**:
 - `prompt` (optional): User's text prompt
-- `files`: 1-3 uploaded images
+- `files`: 1-3 inputs; each may be a binary image upload or a `text/plain` pseudo-file containing a single stored asset UUID (one per file)
 - `size`: Image dimensions (e.g., "1024x1024")
 - `style`: Style preset (e.g., "polaroid")
 - `aspect_ratio`: Aspect ratio (e.g., "16:9")
-- `output_format`: PNG or JPEG
 - `session_id` (optional): Continue existing session
 - `category`: Routing category (creativity/template/fit/lightbox)
 
@@ -197,10 +196,13 @@ Generate an image using AI agents.
 curl -X POST http://localhost:8000/api/v1/agent/prompt \
   -H "Authorization: Bearer $TOKEN" \
   -F "prompt=sunset over ocean" \
-  -F "files=@photo.jpg" \
+    -F "files=@photo.jpg" \
+    -F "files=@asset_id.txt" \
   -F "size=1024x1024" \
   -F "style=polaroid"
 ```
+
+Where `asset_id.txt` contains the UUID of a previously uploaded model asset, e.g. `8f8d0de1-7eb5-4a1a-9c31-4f3e5b9dd1cb`.
 
 ---
 
