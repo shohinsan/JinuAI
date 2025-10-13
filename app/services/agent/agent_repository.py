@@ -22,6 +22,7 @@ class AgentRepository:
     def create_asset(
         self,
         *,
+        asset_id: uuid.UUID | None = None,
         object_path: str,
         bucket_name: str,
         filename: str,
@@ -34,6 +35,7 @@ class AgentRepository:
     ) -> Asset:
         """Create a new asset record in the database."""
         asset = Asset(
+            id=asset_id or uuid.uuid4(),
             object_path=object_path,
             bucket_name=bucket_name,
             asset_type=asset_type,

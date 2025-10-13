@@ -25,7 +25,7 @@ from google.adk.events.event_actions import EventActions
 from google.adk.sessions import Session
 from PIL import Image
 
-from app.utils.agent_tool import get_predefined_styles
+from app.utils.agent_tool import resolve_styles_for_tool
 from app.utils.config import get_banana_session_service, settings
 from app.utils.models import ImageAspectRatio, ImageCategory, ImageMimeType, ImageRequest, ImageStatus
 
@@ -223,15 +223,23 @@ def get_input_prompt_and_category(
     Returns:
         Tuple of (input_prompt, category, normalized_style)
     """
+    style_info = resolve_styles_for_tool(request.style)
+    style_prompt = (style_info or {}).get("prompt")
+    style_category = (style_info or {}).get("category")
+    normalized_style = (style_info or {}).get("normalized_style")
+
     category = request.category
-    
+    if category is None and style_category:
+        try:
+            category = ImageCategory(style_category)
+        except ValueError:
+            category = None
+
     # Templates always use predefined style prompt; others use user prompt with style fallback
     should_use_template = category == ImageCategory.TEMPLATE
     user_prompt = None if should_use_template else request.prompt
-    
-    input_prompt = user_prompt or (get_predefined_styles(request.style) or [""])[0]
-    normalized_style = None  # Style normalization not currently used
-    
+
+    input_prompt = user_prompt or style_prompt or ""
     return input_prompt, category, normalized_style
 
 async def generate_image_bytes(

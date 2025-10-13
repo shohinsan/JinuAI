@@ -1,7 +1,10 @@
 
+import base64
 from io import BytesIO
-from typing import List, Optional
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from mimetypes import guess_type
+from pathlib import PurePosixPath
+from typing import Any, List, Optional
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, Request
 from fastapi.responses import StreamingResponse
 from starlette.datastructures import Headers
 
@@ -11,12 +14,53 @@ from app.utils.delegate import (
     AgentServiceDep,
     CurrentUser,
 )
-from app.utils.models import (
-    ImageCategory,
-    ImageRequest,
-    ImageResponse,
-)
+from app.utils.models import Asset, AssetType, ImageCategory, ImageRequest, ImageResponse
 router = APIRouter()
+
+
+def serialize_asset(
+    asset: Asset,
+    request: Request | None = None,
+    *,
+    data_bytes: bytes | None = None,
+) -> dict[str, Any]:
+    """Serialize an Asset record for API responses."""
+    asset_type = (
+        asset.asset_type.value
+        if isinstance(asset.asset_type, AssetType)
+        else asset.asset_type
+    )
+    object_path = asset.object_path or ""
+    filename = getattr(asset, "filename", "") or PurePosixPath(object_path).name
+    content_type, _ = guess_type(filename or object_path)
+    download_path = router.url_path_for(
+        "download_media_asset", asset_id=str(asset.id)
+    )
+    download_url = (
+        str(request.url_for("download_media_asset", asset_id=str(asset.id)))
+        if request
+        else download_path
+    )
+
+    payload = {
+        "id": str(asset.id),
+        "asset_type": asset_type,
+        "session_id": asset.session_id,
+        "object_path": asset.object_path,
+        "bucket_name": asset.bucket_name,
+        "prompt": asset.prompt,
+        "created_at": asset.created_at.isoformat(),
+        "filename": filename or None,
+        "content_type": content_type,
+        "download_url": download_url,
+    }
+    if data_bytes is not None:
+        data_mime = content_type or "application/octet-stream"
+        payload["data_url"] = (
+            f"data:{data_mime};base64,{base64.b64encode(data_bytes).decode()}"
+        )
+
+    return payload
 
 
 @router.post("/prompt", response_model=ImageResponse)
@@ -129,6 +173,7 @@ async def upload_media(
 
 @router.get("/media")
 async def list_user_media(
+    request: Request,
     *,
     current_user: CurrentUser,
     agent_service: AgentServiceDep,
@@ -136,52 +181,85 @@ async def list_user_media(
     style_subcategory: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 50,
+    include_data: bool = Query(False, description="Embed base64 previews when true"),
 ):
     """List uploaded assets for the current user by collection."""
     collection = (collection or "all").strip().lower()
     
     list_handlers = {
-        "all": lambda: agent_service.get_user_assets(current_user.id, skip, limit),
-        "media": lambda: agent_service.get_user_media(current_user.id, skip, limit),
-        "models": lambda: agent_service.get_model_assets(current_user.id, skip, limit),
-        "style": lambda: agent_service.get_style_assets(style_subcategory, skip, limit),
+        "all": lambda: agent_service.get_user_assets(
+            user_id=current_user.id,
+            skip=skip,
+            limit=limit,
+        ),
+        "media": lambda: agent_service.get_user_media(
+            user_id=current_user.id,
+            skip=skip,
+            limit=limit,
+        ),
+        "models": lambda: agent_service.get_model_assets(
+            user_id=current_user.id,
+            skip=skip,
+            limit=limit,
+        ),
+        "style": lambda: agent_service.get_style_assets(
+            style_subcategory=style_subcategory,
+            skip=skip,
+            limit=limit,
+        ),
     }
 
     if collection not in list_handlers:
         raise HTTPException(status_code=400, detail="Invalid collection")
 
     assets = list_handlers[collection]()
+    asset_data: dict[str, bytes | None] = {}
+
+    if include_data:
+        for asset in assets:
+            try:
+                data = await agent_service.fetch_asset_bytes(asset)
+            except FileNotFoundError:
+                data = None
+            asset_data[str(asset.id)] = data
+
+    serialized_assets = [
+        serialize_asset(
+            asset,
+            request,
+            data_bytes=asset_data.get(str(asset.id)),
+        )
+        for asset in assets
+    ]
+
     return {
         "total": len(assets),
-        "assets": [
-            {
-                "id": str(asset.id),
-                "created_at": asset.created_at.isoformat(),
-            }
-            for asset in assets
-        ],
+        "assets": serialized_assets,
     }
 
 
 @router.get("/media/{asset_id}")
 async def get_media_asset(
     asset_id: str,
+    request: Request,
     *,
     current_user: CurrentUser,
     agent_service: AgentServiceDep,
+    include_data: bool = Query(False, description="Embed a base64 preview when true"),
 ):
     """Get a specific media asset by ID."""
     asset = agent_service.resolve_asset_by_identifier(asset_id, current_user.id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    return {
-        "id": str(asset.id),
-        "asset_type": asset.asset_type,
-        "session_id": asset.session_id,
-        "prompt": asset.prompt,
-        "created_at": asset.created_at.isoformat(),
-    }
+    data_bytes = None
+    if include_data:
+        try:
+            data_bytes = await agent_service.fetch_asset_bytes(asset)
+        except FileNotFoundError:
+            data_bytes = None
+
+    return serialize_asset(asset, request, data_bytes=data_bytes)
 
 
 @router.get("/media/{asset_id}/download", name="download_media_asset")
@@ -197,10 +275,18 @@ async def download_media_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     data = await agent_service.fetch_asset_bytes(asset)
+    filename = getattr(asset, "filename", "") or PurePosixPath(
+        asset.object_path or ""
+    ).name or f"{asset.id}"
+    media_type = guess_type(filename)[0] or "application/octet-stream"
+    headers = {}
+    if filename:
+        headers["Content-Disposition"] = f'inline; filename="{filename}"'
+
     return StreamingResponse(
         BytesIO(data),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename={asset.id}.bin"},
+        media_type=media_type,
+        headers=headers,
     )
 
 
@@ -229,4 +315,3 @@ async def search_prompts(
             for asset in assets
         ],
     }
-

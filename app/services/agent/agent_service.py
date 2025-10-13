@@ -83,6 +83,7 @@ class AgentService:
     async def upload_and_track_media(
         self,
         *,
+        asset_id: uuid.UUID | None = None,
         user_id: uuid.UUID,
         filename: str,
         data: bytes,
@@ -112,8 +113,10 @@ class AgentService:
 
         # Create database record
         asset = self.repository.create_asset(
+            asset_id=asset_id,
             object_path=resolved_path,
             bucket_name=settings.MINIO_BUCKET_NAME,
+            filename=filename,
             asset_type=AssetType.MEDIA,
             user_id=user_id,
             session_id=session_id,
@@ -127,6 +130,7 @@ class AgentService:
     async def upload_and_track_model(
         self,
         *,
+        asset_id: uuid.UUID | None = None,
         user_id: uuid.UUID,
         filename: str,
         data: bytes,
@@ -147,8 +151,10 @@ class AgentService:
 
         # Create database record
         asset = self.repository.create_asset(
+            asset_id=asset_id,
             object_path=resolved_path,
             bucket_name=settings.MINIO_BUCKET_NAME,
+            filename=filename,
             asset_type=AssetType.MODEL,
             user_id=user_id,
         )
@@ -158,6 +164,7 @@ class AgentService:
     async def upload_and_track_style(
         self,
         *,
+        asset_id: uuid.UUID | None = None,
         user_id: uuid.UUID,
         filename: str,
         data: bytes,
@@ -180,8 +187,10 @@ class AgentService:
 
         # Create database record
         asset = self.repository.create_asset(
+            asset_id=asset_id,
             object_path=resolved_path,
             bucket_name=settings.MINIO_BUCKET_NAME,
+            filename=filename,
             asset_type=AssetType.STYLE,
             user_id=user_id,
         )
@@ -477,7 +486,8 @@ class AgentService:
             )
 
         # Save locally (for development/debugging)
-        filename = f"{uuid.uuid4().hex}.{output_format.name.lower()}"
+        asset_id = uuid.uuid4()
+        filename = f"{asset_id}.{output_format.name.lower()}"
         out_dir = os.path.join(os.getcwd(), "generated-img")
         os.makedirs(out_dir, exist_ok=True)
         out_path = os.path.join(out_dir, filename)
@@ -486,6 +496,7 @@ class AgentService:
 
         # Upload and track asset using merged methods
         asset = await self.upload_and_track_media(
+            asset_id=asset_id,
             user_id=user_id,
             filename=filename,
             data=final_bytes,
