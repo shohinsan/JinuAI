@@ -6,7 +6,7 @@ Uses object tagging for organization instead of folder hierarchies.
 Tagging Strategy:
 - collection: media|models|styles
 - type: static|custom (for models)
-- style: fit|template|product|lightbox|creativity (for styles)
+- style: fit|template|product|styles:*|lightbox:* (for styles)
 - user_id: UUID (for media)
 """
 
@@ -198,10 +198,10 @@ async def upload_style_asset(
 ) -> str | None:
     """Upload a style template asset to MinIO.
     Stores in flat structure: styles/{filename}
-    Tags: collection=styles, style={fit|template|product|lightbox|creativity}
+    Tags: collection=styles, style={fit|template|product|styles:*|lightbox:*}
 
     Args:
-        style: Style subcategory (fit, template, product, lightbox, creativity)
+        style: Style subcategory (fit, template, product, or namespaced template groups like styles:* / lightbox:*)
         filename: Filename to store
         data: File bytes
         content_type: MIME type
@@ -396,7 +396,7 @@ async def list_style_assets(style: str | None = None) -> list[UserMediaObject]:
     """List style template assets, optionally filtered by subcategory using tags.
 
     Args:
-        style: Optional style subcategory to filter (fit, template, product, lightbox, creativity)
+        style: Optional style subcategory to filter (fit, template, product, or namespaced keys like styles:* / lightbox:*)
 
     Returns:
         List of style assets

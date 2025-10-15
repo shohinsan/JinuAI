@@ -72,12 +72,11 @@ class ImageStyle(str, Enum):
 
 
 class ImageCategory(str, Enum):
-    """Routing categories for refinement"""
-    CREATIVITY = "creativity"
+    """Routing categories for refinement."""
+
+    DEFAULT = "default"
     TEMPLATE = "template"
     FIT = "fit"
-    LIGHTBOX = "lightbox"
-    
 
 
 class ImageMimeType(str, Enum):
@@ -346,7 +345,10 @@ class ImageRequest(BaseModel):
     style: Optional[str] = Field(default=None, description="Optional style preset key (matches ImageStyle values)")
     aspect_ratio: Optional[ImageAspectRatio] = Field(default=None, description="Aspect ratio of the generated images. Supported values are '1:1', '3:4', '4:3', '9:16', and '16:9'")
     session_id: Optional[str] = Field(default=None, description="Session identifier to persist state")
-    category: Optional[ImageCategory] = Field(None, description="Routing category: 'creativity', 'template', 'fit', or 'lightbox'")
+    category: Optional[ImageCategory] = Field(
+        None,
+        description="Routing category: 'default', 'template', or 'fit'. Defaults to 'default' when omitted.",
+    )
 
 
 @field_validator("files")
@@ -424,6 +426,33 @@ def normalize_style(cls, value: Any) -> Any:
         return alias_map[str_value]
 
     return value
+
+@field_validator("category", mode="before")
+@classmethod
+def normalize_category(cls, value: Any) -> Any:
+    """Allow legacy category values and map to the current enum."""
+    if value is None or isinstance(value, ImageCategory):
+        return value
+
+    str_value = str(value).strip().lower()
+    if not str_value:
+        return None
+
+    legacy_map = {
+        "default": ImageCategory.DEFAULT,
+        "creativity": ImageCategory.DEFAULT,
+        "creative": ImageCategory.DEFAULT,
+        "template": ImageCategory.TEMPLATE,
+        "fit": ImageCategory.FIT,
+        # Lightbox flows now route through the template category
+        "lightbox": ImageCategory.TEMPLATE,
+    }
+
+    mapped = legacy_map.get(str_value)
+    if mapped:
+        return mapped
+
+    raise ValueError(f"Unsupported category: {value!r}")
 
 class ImageResponse(BaseModel):
     """Response model for image generation"""

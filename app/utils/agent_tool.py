@@ -26,15 +26,32 @@ STYLE_PRESETS: dict[str, Tuple[str, ImageCategory]] = {
     "gta": ("Create a GTA-style poster artwork featuring the [uploaded person or theme]. Use the signature Rockstar Games poster design: bold cell-shaded illustration, thick outlines, saturated colors, and cinematic framing. Split the poster into multiple dynamic panels, each showing a different scene or action shot of the subject — such as driving, posing, or holding props relevant to the character/theme. Include urban backdrops, neon lights, and dramatic perspectives to capture the gritty yet stylish GTA aesthetic. The overall composition should feel like an official Grand Theft Auto promotional poster, striking and iconic.", ImageCategory.TEMPLATE),
     "reflection": ("In a dimly lit bathroom, the person from the first picture stands on the left side, seen from behind as they face a mirror above a white sink with a silver faucet, the faint outline of a glass shower visible in the background. Shadows and soft light envelop the real side of the room, creating a subdued, almost eerie stillness, yet in the mirror's reflection emerges the armored warrior from the second picture, unchanged in design and radiant in a focused glow. This contrast between darkness and light bridges the ordinary and the extraordinary, infusing the scene with a mysterious, suspenseful tension as the two worlds seem to meet within the mirror's surface.", ImageCategory.TEMPLATE),
     
-    # FIT category styles - add your FIT presets here
+    # FIT category styles can be added below if needed.
     # "fit_style_1": ("Your FIT prompt here", ImageCategory.FIT),
-    
-    # LIGHTBOX category styles - add your LIGHTBOX presets here
-    # "lightbox_style_1": ("Your LIGHTBOX prompt here", ImageCategory.LIGHTBOX),
-    
-    # CREATIVITY category styles - add your CREATIVITY presets here
-    # "creative_style_1": ("Your CREATIVITY prompt here", ImageCategory.CREATIVITY),
 }
+
+LIGHTBOX_TEMPLATE_PRESETS: dict[str, Tuple[str, ImageCategory]] = {
+    "studio": (
+        "A high-resolution, studio-lit product photograph featuring the hero item from the first reference image staged within the context of the second reference image. Use soft three-point lighting with clean diffusion, subtle reflections, and a minimal gradient backdrop. Preserve the product's exact colors, logos, and material textures while emphasizing technical camera guidance such as f/8 aperture, ISO 200, and 1/160 shutter speed. Include negative direction like 'retain design integrity and color accuracy as in source' and 'avoid plain backgrounds or altering brand colors.'",
+        ImageCategory.TEMPLATE,
+    ),
+    "lifestyle": (
+        "A lifestyle product showcase that blends the item from the first reference image into the scene of the second reference image. Capture cinematic natural lighting with shallow depth of field so the product stays in sharp focus while the environment supports the story. Describe materials, finishes, and branding exactly as provided and reinforce guardrails such as 'retain design integrity and color accuracy as in source' and 'avoid removing logos or changing patterns.'",
+        ImageCategory.TEMPLATE,
+    ),
+}
+
+STYLE_PRESETS.update(LIGHTBOX_TEMPLATE_PRESETS)
+# Provide grouped aliases so the UI can present categorized template presets.
+for key, value in list(STYLE_PRESETS.items()):
+    prompt, category = value
+    if category == ImageCategory.TEMPLATE and ":" not in key:
+        STYLE_PRESETS.setdefault(f"styles:{key}", value)
+
+for key, value in LIGHTBOX_TEMPLATE_PRESETS.items():
+    STYLE_PRESETS.setdefault(f"lightbox:{key}", value)
+    STYLE_PRESETS.setdefault(f"template:lightbox:{key}", value)
+    STYLE_PRESETS.setdefault(f"template:{key}", value)
 
 
 def resolve_styles_for_tool(

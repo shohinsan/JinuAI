@@ -183,7 +183,7 @@ Generate an image using AI agents.
 - `style`: Style preset (e.g., "polaroid")
 - `aspect_ratio`: Aspect ratio (e.g., "16:9")
 - `session_id` (optional): Continue existing session
-- `category`: Routing category (creativity/template/fit/lightbox)
+- `category`: Routing category (`default`, `template`, or `fit`). Omit to fall back to the default refinement flow.
 
 **Response**: `ImageResponse` with:
 - Generated image (base64 encoded)
@@ -216,7 +216,7 @@ The `Asset` model tracks all files in MinIO:
 | `object_path` | String(500) | MinIO object path (unique, indexed) |
 | `bucket_name` | String(100) | MinIO bucket (default: "jinuai-assets") |
 | `asset_type` | Enum | `MEDIA`, `MODEL`, or `STYLE` |
-| `style_subcategory` | String(50) | For styles: `fit`, `template`, `product` |
+| `style_subcategory` | String(50) | For styles: `fit`, `template`, namespaced template groups like `styles:*` or `lightbox:*` |
 | `filename` | String(255) | Original filename |
 | `mime_type` | String(50) | Content type (e.g., "image/png") |
 | `file_size` | Integer | Size in bytes |

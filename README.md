@@ -5,10 +5,9 @@
 This project is an **AI-powered image generation application** that enables users to create **high-quality images** using Google’s advanced AI model codenamed **Nano Banana**.  
 
 ### Supported Modes
-- **Creative Mode** – Generate images from scratch based on user prompts.  
+- **Default Mode** – Automatically refine prompts when no category is selected.  
 - **Fitting Mode** – Modify existing images to fit new styles or concepts.  
-- **Lightbox (Product) Mode** – Showcase and edit product images.  
-- **Style (Template) Mode** – Apply predefined templates or styles to images.  
+- **Template Mode (Styles & Lightbox)** – Apply predefined templates, including Lightbox product presets.  
 
 ### Requirements & References
 > ⚠️ **Important:** This project **requires the `GOOGLE_AI_SDK`** to function properly.  

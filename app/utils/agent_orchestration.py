@@ -16,14 +16,14 @@ else:
 
 
 # ============================================================
-# 🧠 CREATIVITY AGENT
+# 🧠 DEFAULT AGENT
 # ============================================================
-creativity_agent = Agent(
+default_agent = Agent(
     model=settings.FLASH_TEXT,
-    name="creativity_agent",
+    name="default_agent",
     instruction=textwrap.dedent("""
     <background_information>
-    You are a creative agent specialized in refining user prompts for realistic and imaginative image generation.
+    You are the default agent specialized in refining user prompts for realistic and imaginative image generation.
     </background_information>
 
     <instructions>
@@ -70,38 +70,6 @@ template_agent = Agent(
     - No conversational text, only the prompt
     """).strip(),
     tools=[style_function_tool],
-)
-
-
-# ============================================================
-# 💡 LIGHTBOX AGENT
-# ============================================================
-lightbox_agent = Agent(
-    model=settings.FLASH_TEXT,
-    name="lightbox_agent",
-    instruction=textwrap.dedent("""
-    <background_information>
-    You are a specialist agent for product photography prompt refinement.
-    </background_information>
-
-    <instructions>
-    Always start with:
-    "A high-resolution, studio-lit product photograph of a [product type] from the first image in the setting of the second image."
-
-    - Describe product features: colors, materials, logos, and patterns.
-    - Preserve design integrity, material texture, and appearance.
-    - Include technical photography terms and specifications.
-    - Never alter colors, logos, or design elements.
-    - Emphasize: "retain design integrity and color accuracy as in source."
-    - Add negative guidance like "avoid plain backgrounds" or "avoid changing colors/patterns."
-    - Keep prompts under 200 words.
-    - Output only the refined generation prompt.
-    </instructions>
-
-    <output_description>
-    A concise, photorealistic product image generation prompt referencing both input images.
-    </output_description>
-    """).strip(),
 )
 
 
@@ -155,9 +123,9 @@ triage_agent = Agent(
     1. Review the input for "ImageCategory:" metadata.
     2. Route based on category:
         • If ImageCategory is "template" → ALWAYS delegate to template_agent
-        • If ImageCategory is "lightbox" → ALWAYS delegate to lightbox_agent
         • If ImageCategory is "fit" → ALWAYS delegate to fit_agent
-        • If no category or "creativity" → delegate to creativity_agent
+        • If no category or "default" → delegate to default_agent
+        • For any other category → delegate to default_agent
     
     3. When delegating to template_agent:
         - Pass the "Style:" value from the input to the template agent
@@ -185,7 +153,7 @@ triage_agent = Agent(
     Never output meta or reasoning text.
     </meta>
     """).strip(),
-    sub_agents=[fit_agent, lightbox_agent, template_agent, creativity_agent],
+    sub_agents=[fit_agent, template_agent, default_agent],
     before_model_callback=prompt_input_guardrail,
     output_key="prompt",
 )

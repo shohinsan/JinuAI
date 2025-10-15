@@ -230,12 +230,23 @@ def get_input_prompt_and_category(
 
     category = request.category
     if category is None and style_category:
-        try:
-            category = ImageCategory(style_category)
-        except ValueError:
-            category = None
+        normalized_style_category = str(style_category).strip().lower()
+        if normalized_style_category == ImageCategory.TEMPLATE.value:
+            category = ImageCategory.TEMPLATE
+        elif normalized_style_category == ImageCategory.FIT.value:
+            category = ImageCategory.FIT
+        elif normalized_style_category in {
+            ImageCategory.DEFAULT.value,
+            "creativity",
+            "creative",
+        }:
+            category = ImageCategory.DEFAULT
+        elif normalized_style_category == "lightbox":
+            category = ImageCategory.TEMPLATE
 
     # Templates always use predefined style prompt; others use user prompt with style fallback
+    category = category or ImageCategory.DEFAULT
+
     should_use_template = category == ImageCategory.TEMPLATE
     user_prompt = None if should_use_template else request.prompt
 
